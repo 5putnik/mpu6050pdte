@@ -20,29 +20,47 @@ void setup() // Inicializacao do programa
 void draw() // Rotina em repeticao permanente
 {
   rectMode(CORNERS); // Modo de desenho dos retangulos como CORNERS
-  int i; // Variavel geral de laco
+  int mode_xy = 1, // 1: Modo XY, 2: Modo YT
+      mode_line = 1, // 1: Modo linha, 2: Modo ponto
+      i; // Variavel geral de laco
+  final int XMAX = 800,
+            gap = 10,
+            sqrwidth = 400;
   c++; // Contando em qual execucao esta
   if(c == vSize) // Se o programa encontra-se no valor maximo de dados que se pode salvar
     c = 0; // Sobrescreve o dado mais antigo
-  dadox[c] = 595 - (accel_y * 200) / 32768; // Linha temporaria: dados de plot do eixo x
-  dadoy[c] = 210 - (accel_z * 200) / 32768; // Linha temporaria: dados de plot do eixo y
+  dadox[c] = XMAX - (gap + sqrwidth/2) + (accel_y * sqrwidth/2) / 32768; // Linha temporaria: dados de plot do eixo x
+  dadoy[c] = gap + sqrwidth/2 - (accel_z * sqrwidth/2) / 32768; // Linha temporaria: dados de plot do eixo y
   
   background(255, 255, 255); // Tela de fundo branca
   textFont(f, 16); // Fonte tamanho 16
   
-  
   noFill(); // Desabilita preenchimento
-  rect(400, 10, 790, 410); // [Numeros magicos temporarios] Grade externa dos eixos
+  rect(XMAX - (gap + sqrwidth), gap, XMAX - gap, sqrwidth + gap); // Grade externa dos eixos
   fill(0); // Preenche proximos desenhos de preto
-  line(590,10, 590, 410); // [Numeros magicos temporarios] Eixo Y do plano cartesiano
-  line(400,210,790,210); // [Numeros magicos temporarios] Eixo X do plano cartesiano
-  
-  fill(0, 255, 0); // Preenche proximos desenhos de verde
-  stroke(0, 255, 0); // Habilita linhas de contorno verdes
-  for(i=0;i<vSize;i++) // Varre todos os dados
-    if(dadox[i] != 0 && dadoy[i] != 0) // Se eles forem validos
-      rect(dadox[i] - 1, dadoy[i] - 1, dadox[i] + 1, dadoy[i] + 1); // Desenha um "ponto" de tamanho 3x3 pixels
-  stroke(0); // Habilita linhas de contorno pretas
+  line(XMAX - (gap + sqrwidth/2), gap, XMAX - (gap + sqrwidth/2), sqrwidth + gap); // Eixo Y do plano cartesiano
+  if(mode_xy != 0)
+  {
+    line(XMAX - (gap + sqrwidth), gap + sqrwidth/2, XMAX - gap, gap + sqrwidth/2); // Eixo X do plano cartesiano
+    
+    fill(0, 255, 0); // Preenche proximos desenhos de verde
+    stroke(0, 255, 0); // Habilita linhas de contorno verdes
+    for(i=1;i<vSize;i++) // Varre todos os dados
+      if(dadox[i] != 0 && dadoy[i] != 0 && dadox[i-1] != 0 && dadoy[i-1] != 0) // Se eles forem validos
+        if(mode_line != 0)
+          line(dadox[i-1], dadoy[i-1], dadox[i], dadoy[i]);
+        else
+          rect(dadox[i] - 1, dadoy[i] - 1, dadox[i] + 1, dadoy[i] + 1); // Desenha um "ponto" de tamanho 3x3 pixels
+    stroke(0); // Habilita linhas de contorno pretas
+  }
+  else
+  {
+    for(i=1;i<vSize;i++)
+      dadoy[i-1] = dadoy[i];
+    
+    for(i=0;i<vSize;i++)
+      rect(i, dadoy[i] - 1, i, dadoy[i] + 1);
+  }
   
   
 
