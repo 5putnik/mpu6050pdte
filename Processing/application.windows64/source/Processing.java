@@ -38,8 +38,8 @@ public void setup() // Inicializacao do programa
 public void draw() // Rotina em repeticao permanente
 {
   rectMode(CORNERS); // Modo de desenho dos retangulos como CORNERS
-  int mode_xy = 1, // 1: Modo XY, 2: Modo YT
-      mode_line = 1, // 1: Modo linha, 2: Modo ponto
+  int mode_xy = 1, // 1: Modo XY, 0: Modo YT
+      mode_line = 1, // 1: Modo linha, 0: Modo ponto
       i; // Variavel geral de laco
   final int XMAX = 800,
             gap = 10,
@@ -56,11 +56,11 @@ public void draw() // Rotina em repeticao permanente
   noFill(); // Desabilita preenchimento
   rect(XMAX - (gap + sqrwidth), gap, XMAX - gap, sqrwidth + gap); // Grade externa dos eixos
   fill(0); // Preenche proximos desenhos de preto
-  line(XMAX - (gap + sqrwidth/2), gap, XMAX - (gap + sqrwidth/2), sqrwidth + gap); // Eixo Y do plano cartesiano
+  line(XMAX - (gap + sqrwidth), gap + sqrwidth/2, XMAX - gap, gap + sqrwidth/2); // Eixo X do plano cartesiano
+  
   if(mode_xy != 0)
   {
-    line(XMAX - (gap + sqrwidth), gap + sqrwidth/2, XMAX - gap, gap + sqrwidth/2); // Eixo X do plano cartesiano
-    
+    line(XMAX - (gap + sqrwidth/2), gap, XMAX - (gap + sqrwidth/2), sqrwidth + gap); // Eixo Y do plano cartesiano
     fill(0, 255, 0); // Preenche proximos desenhos de verde
     stroke(0, 255, 0); // Habilita linhas de contorno verdes
     for(i=1;i<vSize;i++) // Varre todos os dados
@@ -75,9 +75,14 @@ public void draw() // Rotina em repeticao permanente
   {
     for(i=1;i<vSize;i++)
       dadoy[i-1] = dadoy[i];
-    
-    for(i=0;i<vSize;i++)
-      rect(i, dadoy[i] - 1, i, dadoy[i] + 1);
+    stroke(0, 255, 0); // Habilita linhas de contorno verdes
+    for(i=1;i<vSize;i++)
+      if(dadox[i] != 0 && dadoy[i] != 0 && dadox[i-1] != 0 && dadoy[i-1] != 0) // Se eles forem validos
+        if(mode_line != 0)
+          line(XMAX - (gap + sqrwidth) + sqrwidth*(i-1)/vSize, dadoy[i-1], XMAX - (gap + sqrwidth) + sqrwidth*i/vSize, dadoy[i]);
+        else
+          rect(XMAX - (gap + sqrwidth) + sqrwidth*i - 1, dadoy[i] - 1, XMAX - (gap + sqrwidth) + sqrwidth*i + 1, dadoy[i] + 1);
+     stroke(0); // Habilita linhas de contorno pretas
   }
   
   
