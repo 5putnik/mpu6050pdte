@@ -3,6 +3,7 @@ import processing.data.*;
 import processing.event.*; 
 import processing.opengl.*; 
 
+import controlP5.*; 
 import processing.serial.*; 
 
 import java.util.HashMap; 
@@ -18,6 +19,7 @@ public class Processing extends PApplet {
 
 
 
+
 float accel_x, accel_y, accel_z, tmp,gyro_x, gyro_y, gyro_z = 0; // Valores medidos pelo sensor
 Serial myPort; // Porta serial do Arduino a ser lida
 final int vSize = 200; // Quantidade maxima de dados a ser salva
@@ -26,6 +28,12 @@ int c = 0; // Contador
 
 PFont f; // Fonte do texto
 
+ControlP5 cp5; // Controle para utilizar objetos
+DropdownList axismode, // lista para escolher o modo eixo (XY ou YT)
+             fillmode, // lista para escolher o modo preenchimento (linha ou ponto)
+             valorx,
+             valory;
+
 public void setup() // Inicializacao do programa
 {
    // Gerando uma tela 800x600 com renderizacao 2D melhorada
@@ -33,6 +41,16 @@ public void setup() // Inicializacao do programa
   myPort.bufferUntil('\n'); // Busca por \n
   colorMode(RGB, 1);
   f = createFont("Arial", 16, true); // Escolhendo fonte do texto como Arial 16
+  
+  cp5 = new ControlP5(this);
+  axismode = cp5.addDropdownList("Representacao",10,200,100,84);
+  fillmode = cp5.addDropdownList("Preenchimento",120,200,100,84);
+  valorx = cp5.addDropdownList("Eixo X",10,300,100,84);
+  valory = cp5.addDropdownList("Eixo Y",120,300,100,84);
+  axis_create(axismode); // Cria a lista axismode
+  fill_create(fillmode); // Cria a lista fillmode
+  x_create(valorx); // Cria a lista valorx
+  y_create(valory); // Cria a lista valory
 }
 
 public void draw() // Rotina em repeticao permanente
@@ -47,8 +65,53 @@ public void draw() // Rotina em repeticao permanente
   c++; // Contando em qual execucao esta
   if(c == vSize) // Se o programa encontra-se no valor maximo de dados que se pode salvar
     c = 0; // Sobrescreve o dado mais antigo
-  dadox[c] = XMAX - (gap + sqrwidth/2) + (accel_y * sqrwidth/2) / 32768; // Linha temporaria: dados de plot do eixo x
-  dadoy[c] = gap + sqrwidth/2 - (accel_z * sqrwidth/2) / 32768; // Linha temporaria: dados de plot do eixo y
+    
+  switch(PApplet.parseInt(valorx.getValue())) // Selecao de variavel eixo X
+  {
+    case 0:
+      dadox[c] = accel_x;
+      break;
+    case 1:
+      dadox[c] = accel_y;
+      break;
+    case 2:
+      dadox[c] = accel_z;
+      break;
+    case 3:
+      dadox[c] = gyro_x;
+      break;
+    case 4:
+      dadox[c] = gyro_y;
+      break;
+    case 5:
+      dadox[c] = gyro_z;
+      break;
+  }
+  
+  switch(PApplet.parseInt(valory.getValue())) // Selecao de variavel eixo Y
+  {
+    case 0:
+      dadoy[c] = accel_x;
+      break;
+    case 1:
+      dadoy[c] = accel_y;
+      break;
+    case 2:
+      dadoy[c] = accel_z;
+      break;
+    case 3:
+      dadoy[c] = gyro_x;
+      break;
+    case 4:
+      dadoy[c] = gyro_y;
+      break;
+    case 5:
+      dadoy[c] = gyro_z;
+      break;
+  }
+  
+  dadox[c] = XMAX - (gap + sqrwidth/2) + (dadox[c] * sqrwidth/2) / 32768; // Linha temporaria: dados de plot do eixo x
+  dadoy[c] = gap + sqrwidth/2 - (dadoy[c] * sqrwidth/2) / 32768; // Linha temporaria: dados de plot do eixo y
   
   background(255, 255, 255); // Tela de fundo branca
   textFont(f, 16); // Fonte tamanho 16
@@ -57,7 +120,8 @@ public void draw() // Rotina em repeticao permanente
   rect(XMAX - (gap + sqrwidth), gap, XMAX - gap, sqrwidth + gap); // Grade externa dos eixos
   fill(0); // Preenche proximos desenhos de preto
   line(XMAX - (gap + sqrwidth), gap + sqrwidth/2, XMAX - gap, gap + sqrwidth/2); // Eixo X do plano cartesiano
-  
+  mode_xy = PApplet.parseInt(axismode.getValue()); // Le lista axismode
+  mode_line = PApplet.parseInt(fillmode.getValue()); // Le lista fillmode
   if(mode_xy != 0)
   {
     line(XMAX - (gap + sqrwidth/2), gap, XMAX - (gap + sqrwidth/2), sqrwidth + gap); // Eixo Y do plano cartesiano
@@ -134,6 +198,51 @@ public void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrit
       gyro_z = PApplet.parseFloat(temp[7]); // Atualiza variavel global
     }
   }
+}
+
+public void axis_create(DropdownList ddl) // Customizar a lista axismode 
+{
+  ddl_standard(ddl); // Parametros iniciais da lista
+  ddl.addItem("Modo YT", 0); // Adicionado item
+  ddl.addItem("Modo XY", 1); // Adicionado item
+}
+
+public void fill_create(DropdownList ddl) // Customizar a lista fillmode
+{
+  ddl_standard(ddl); // Parametros iniciais da lista
+  ddl.addItem("Pontos", 0); // Adicionado item
+  ddl.addItem("Linhas", 0); // Adicionado item
+}
+
+public void x_create(DropdownList ddl) // Customizar a lista valorx
+{
+  ddl_standard(ddl); // Parametros iniciais da lista
+  ddl.addItem("Acel X", 0); // Adicionado item
+  ddl.addItem("Acel Y", 1); // Adicionado item
+  ddl.addItem("Acel Z", 2); // Adicionado item
+  ddl.addItem("Gyro X", 3); // Adicionado item
+  ddl.addItem("Gyro Y", 4); // Adicionado item
+  ddl.addItem("Gyro Z", 5); // Adicionado item
+}
+
+public void y_create(DropdownList ddl) // Customizar a lista valory
+{
+  ddl_standard(ddl); // Parametros iniciais da lista
+  ddl.addItem("Acel X", 0); // Adicionado item
+  ddl.addItem("Acel Y", 1); // Adicionado item
+  ddl.addItem("Acel Z", 2); // Adicionado item
+  ddl.addItem("Gyro X", 3); // Adicionado item
+  ddl.addItem("Gyro Y", 4); // Adicionado item
+  ddl.addItem("Gyro Z", 5); // Adicionado item
+}
+
+public void ddl_standard(DropdownList ddl) // Customizacao padrao de toda lista
+{
+  ddl.setBackgroundColor(color(220)); // Cor de fundo da lista
+  ddl.setItemHeight(20); // Tamanho de cada item mostrado
+  ddl.setBarHeight(15); // Tamanho da barra
+  ddl.setColorBackground(color(60)); // Cor do fundo para itens e barra
+  ddl.setColorActive(color(255,128)); // Cor do item quando ativado por mouse
 }
   public void settings() {  size(800, 600, P2D); }
   static public void main(String[] passedArgs) {
