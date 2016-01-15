@@ -23,9 +23,13 @@ public class Processing extends PApplet {
 float accel_x, accel_y, accel_z, tmp,gyro_x, gyro_y, gyro_z = 0; // Valores medidos pelo sensor
 String acx, acy, acz, gyx, gyy, gyz; // Valores convertidos para mostrar na tela 
 
+float offset_ax, offset_ay, offset_az; // Valor dinamico de offset para remover gravidade
+
 Serial myPort; // Porta serial do Arduino a ser lida
-final int vSize = 400; // Quantidade maxima de dados a ser salva
-float dadox[] = new float[vSize], dadoy[] = new float[vSize]; // Dados a serem mostrados no grafico
+int vSize = 400; // Quantidade de dados a ser salva
+final int maxSize = 1000; // Quantidade maxima de dados a ser salva
+float dadox[] = new float[maxSize], dadoy[] = new float[maxSize]; // Dados a serem mostrados no grafico
+float f_dadox[] = new float[maxSize], f_dadoy[] = new float[maxSize]; // Dados a serem filtrados
 int c = 0; // Contador
 
 PFont f; // Fonte do texto
@@ -36,8 +40,19 @@ DropdownList axismode, // lista para escolher o modo eixo (XY ou YT)
              valorx, // lista de valores a serem plotados (Eixo X ou valor 1)
              valory, // lista de valores a serem plotados (Eixo Y ou valor 2)
              ac_unit, // lista de unidade do acelerometro (m/s\u00b2 ou g)
-             gy_unit; // lista de unidade do giroscopio (\u00ba/s ou rad/s)
-
+             gy_unit, // lista de unidade do giroscopio (\u00ba/s ou rad/s)
+             filter, // lista de filtros
+             sample; // selecao de dados amostrados
+final int XMAX = 800, // Parametro: Tamanho X da tela
+          gap = 10, // Parametro: espacamento geral
+          sqrwidth = 400; // Parametro: tamanho do grafico
+          
+int mode_xy = 1, // 1: Modo XY, 0: Modo YT
+    mode_line = 1, // 1: Modo linha, 0: Modo ponto
+    mode_x = 1,
+    mode_y = 1,
+    mode_filter = 1,
+    mode_sample = 1;
 public void setup() // Inicializacao do programa
 {
    // Gerando uma tela 800x600 com renderizacao 2D melhorada
@@ -47,18 +62,23 @@ public void setup() // Inicializacao do programa
   f = createFont("Arial", 16, true); // Escolhendo fonte do texto como Arial 16
   
   cp5 = new ControlP5(this);
-  axismode = cp5.addDropdownList("Representacao",10, 200, 100, 84);
-  fillmode = cp5.addDropdownList("Preenchimento",120, 200, 100, 84);
-  valorx = cp5.addDropdownList("Eixo X", 10, 300, 100, 84);
-  valory = cp5.addDropdownList("Eixo Y", 120, 300, 100, 84);
-  ac_unit = cp5.addDropdownList("Unidade ac", 270, 20, 100, 84);
-  gy_unit = cp5.addDropdownList("Unidade gy", 270, 100, 100, 84);
+  axismode = cp5.addDropdownList("Modo YT",10, 200, 100, 84);
+  fillmode = cp5.addDropdownList("Pontos",120, 200, 100, 84);
+  valorx = cp5.addDropdownList("Acel X", 10, 300, 100, 84);
+  valory = cp5.addDropdownList("Gyro X", 120, 300, 100, 84);
+  ac_unit = cp5.addDropdownList("m/s^2", 270, 20, 100, 84);
+  gy_unit = cp5.addDropdownList("grau/s", 270, 100, 100, 84);
+  filter = cp5.addDropdownList("Raw", XMAX/2 + 45, 2*gap + sqrwidth, 100, 84);
+  sample = cp5.addDropdownList("400 (padrao)", XMAX/2 + 245, 2*gap + sqrwidth, 100, 84);
+  
   axis_create(axismode); // Cria a lista axismode
   fill_create(fillmode); // Cria a lista fillmode
   x_create(valorx); // Cria a lista valorx
   y_create(valory); // Cria a lista valory
   ac_create(ac_unit); // Cria a lista ac_unit
   gy_create(gy_unit); // Cria a lista gy_unit
+  filter_create(filter); // Cria a lista filter
+  sample_create(sample); // Cria a lista sample
   
 }
 
@@ -68,57 +88,108 @@ public void draw() // Rotina em repeticao permanente
   textFont(f, 16); // Fonte tamanho 16
   
   rectMode(CORNERS); // Modo de desenho dos retangulos como CORNERS
-  int mode_xy = 1, // 1: Modo XY, 0: Modo YT
-      mode_line = 1, // 1: Modo linha, 0: Modo ponto
-      i; // Variavel geral de laco
-  final int XMAX = 800,
-            gap = 10,
-            sqrwidth = 400;
+  int i; // Variavel geral de laco
+  
+  switch(PApplet.parseInt(sample.getValue()))
+  {
+    case 0:
+      vSize = 400;
+      break;
+    case 1:
+      vSize = 50;
+      break;
+    case 2:
+      vSize = 100;
+      break;
+    case 3:
+      vSize = 200;
+      break;
+    case 4:
+      vSize = 250;
+      break;
+    case 5:
+      vSize = 500;
+      break;
+    case 6:
+      vSize = 750;
+      break;
+    case 7:
+      vSize = 1000;
+      break;
+  }
+
   c++; // Contando em qual execucao esta
   if(c == vSize) // Se o programa encontra-se no valor maximo de dados que se pode salvar
     c = 0; // Sobrescreve o dado mais antigo
-    
+  
+  if(mode_x != PApplet.parseInt(valorx.getValue()) || mode_y != PApplet.parseInt(valory.getValue()) || mode_filter != PApplet.parseInt(filter.getValue()) || mode_xy != PApplet.parseInt(axismode.getValue()) || mode_sample != PApplet.parseInt(sample.getValue())) // Se o grafico for alterado
+    for(i=0;i<vSize;i++)
+    {
+      dadox[i] = 0; // Reseta (limpa) eixo X do grafico
+      dadoy[i] = 0; // Reseta (limpa) eixo Y do grafico
+      c = 0; // Volta contador ao inicio
+    }
+  mode_sample = PApplet.parseInt(sample.getValue());
+  mode_x = PApplet.parseInt(valorx.getValue());
+  mode_y = PApplet.parseInt(valory.getValue());
+  mode_filter = PApplet.parseInt(filter.getValue());
   switch(PApplet.parseInt(valorx.getValue())) // Selecao de variavel eixo X
   {
     case 0:
-      dadox[c] = accel_x;
+      f_dadox[c] = accel_x;
       break;
     case 1:
-      dadox[c] = accel_y;
+      f_dadox[c] = accel_y;
       break;
     case 2:
-      dadox[c] = accel_z;
+      f_dadox[c] = accel_z;
       break;
     case 3:
-      dadox[c] = gyro_x;
+      f_dadox[c] = gyro_x;
       break;
     case 4:
-      dadox[c] = gyro_y;
+      f_dadox[c] = gyro_y;
       break;
     case 5:
-      dadox[c] = gyro_z;
+      f_dadox[c] = gyro_z;
       break;
   }
   
   switch(PApplet.parseInt(valory.getValue())) // Selecao de variavel eixo Y
   {
     case 0:
-      dadoy[c] = accel_x;
+      f_dadoy[c] = gyro_x;
       break;
     case 1:
-      dadoy[c] = accel_y;
+      f_dadoy[c] = gyro_y;
       break;
     case 2:
-      dadoy[c] = accel_z;
+      f_dadoy[c] = gyro_z;
       break;
     case 3:
-      dadoy[c] = gyro_x;
+      f_dadoy[c] = accel_x;
       break;
     case 4:
-      dadoy[c] = gyro_y;
+      f_dadoy[c] = accel_y;
       break;
     case 5:
-      dadoy[c] = gyro_z;
+      f_dadoy[c] = accel_z;
+      break;
+  }
+  
+  if(c > 0) switch(PApplet.parseInt(filter.getValue())) // Selecao do filtro (somente a partir da segunda leitura)
+  {
+    case 0: // Valores crus: fazer nada
+      break;
+    case 1:  // Passa-baixas
+      f_dadox[c] = lowpass(f_dadox[c], f_dadox[c-1], 0.1f);
+      f_dadoy[c] = lowpass(f_dadoy[c], f_dadoy[c-1], 0.1f);
+      break;
+    case 2:  // Kalman
+      // UNDER CONSTRUCTION
+      break;
+    case 3:  // Complementar
+      // UNDER CONSTRUCTION
       break;
   }
   
@@ -129,10 +200,10 @@ public void draw() // Rotina em repeticao permanente
   mode_xy = PApplet.parseInt(axismode.getValue()); // Le lista axismode
   mode_line = PApplet.parseInt(fillmode.getValue()); // Le lista fillmode
   
-  dadoy[c] = gap + sqrwidth/2 - (dadoy[c] * sqrwidth/2) / 32768; // Dados de plot do eixo y
+  dadoy[c] = gap + sqrwidth/2 - (f_dadoy[c] * sqrwidth/2) / 32768; // Dados de plot do eixo y
   if(mode_xy != 0)
   {
-    dadox[c] = XMAX - (gap + sqrwidth/2) + (dadox[c] * sqrwidth/2) / 32768; // Dados de plot do eixo x
+    dadox[c] = XMAX - (gap + sqrwidth/2) + (f_dadox[c] * sqrwidth/2) / 32768; // Dados de plot do eixo x
     line(XMAX - (gap + sqrwidth/2), gap, XMAX - (gap + sqrwidth/2), sqrwidth + gap); // Eixo Y do plano cartesiano
     fill(0, 255, 0); // Preenche proximos desenhos de verde
     stroke(0, 255, 0); // Habilita linhas de contorno verdes
@@ -146,7 +217,7 @@ public void draw() // Rotina em repeticao permanente
   }
   else
   {
-    dadox[c] = gap + sqrwidth/2 - (dadox[c] * sqrwidth/2) / 32768; // Dados de plot do eixo x
+    dadox[c] = gap + sqrwidth/2 - (f_dadox[c] * sqrwidth/2) / 32768; // Dados de plot do eixo x
     
     for(i=1;i<vSize;i++)
     {
@@ -216,6 +287,8 @@ public void draw() // Rotina em repeticao permanente
     text("Leitura giroscopio Z: " + gyz, 10, 140); // Imprime valor lido
     text("Temperatura: " + tmp + "\u00baC", 10, 180); // Imprime valor lido
   }
+  
+  text("Filtro:", XMAX/2, 3*gap + sqrwidth); 
 }
 
 public void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na porta serial
@@ -272,26 +345,48 @@ public void x_create(DropdownList ddl) // Customizar a lista valorx
 public void y_create(DropdownList ddl) // Customizar a lista valory
 {
   ddl_standard(ddl); // Parametros iniciais da lista
-  ddl.addItem("Acel X", 0); // Adicionado item
-  ddl.addItem("Acel Y", 1); // Adicionado item
-  ddl.addItem("Acel Z", 2); // Adicionado item
-  ddl.addItem("Gyro X", 3); // Adicionado item
-  ddl.addItem("Gyro Y", 4); // Adicionado item
-  ddl.addItem("Gyro Z", 5); // Adicionado item
+  ddl.addItem("Gyro X", 0); // Adicionado item
+  ddl.addItem("Gyro Y", 1); // Adicionado item
+  ddl.addItem("Gyro Z", 2); // Adicionado item
+  ddl.addItem("Acel X", 3); // Adicionado item
+  ddl.addItem("Acel Y", 4); // Adicionado item
+  ddl.addItem("Acel Z", 5); // Adicionado item
 }
 
-public void ac_create(DropdownList ddl) // Customizar a lista fillmode
+public void ac_create(DropdownList ddl) // Customizar a lista do acelerometro
 {
   ddl_standard(ddl); // Parametros iniciais da lista
-  ddl.addItem("m/s\u00b2", 0); // Adicionado item
-  ddl.addItem("g", 0); // Adicionado item
+  ddl.addItem("m/s^2", 0); // Adicionado item
+  ddl.addItem("g", 1); // Adicionado item
 }
 
-public void gy_create(DropdownList ddl) // Customizar a lista fillmode
+public void gy_create(DropdownList ddl) // Customizar a lista do giroscopio
 {
   ddl_standard(ddl); // Parametros iniciais da lista
   ddl.addItem("grau/s", 0); // Adicionado item
-  ddl.addItem("rad/s", 0); // Adicionado item
+  ddl.addItem("rad/s", 1); // Adicionado item
+}
+
+public void filter_create(DropdownList ddl) // Customizar a lista do filtro
+{
+  ddl_standard(ddl); // Parametros iniciais da lista
+  ddl.addItem("Raw", 0); // Adicionado item
+  ddl.addItem("Low-pass", 1); // Adicionado item
+  ddl.addItem("Kalman", 2); // Adicionado item
+  ddl.addItem("Complementary", 3); // Adicionado item
+}
+
+public void sample_create(DropdownList ddl) // Customizar a lista do filtro
+{
+  ddl_standard(ddl); // Parametros iniciais da lista
+  ddl.addItem("400 (padrao)", 0); // Adicionado item
+  ddl.addItem("50", 1); // Adicionado item
+  ddl.addItem("100", 2); // Adicionado item
+  ddl.addItem("200", 3); // Adicionado item
+  ddl.addItem("250", 3); // Adicionado item
+  ddl.addItem("500", 5); // Adicionado item
+  ddl.addItem("750", 6); // Adicionado item
+  ddl.addItem("1000", 7); // Adicionado item
 }
 
 public void ddl_standard(DropdownList ddl) // Customizacao padrao de toda lista
@@ -301,6 +396,11 @@ public void ddl_standard(DropdownList ddl) // Customizacao padrao de toda lista
   ddl.setBarHeight(15); // Tamanho da barra
   ddl.setColorBackground(color(60)); // Cor do fundo para itens e barra
   ddl.setColorActive(color(255,128)); // Cor do item quando ativado por mouse
+}
+
+public float lowpass(float read, float old, float pct)
+{
+  return pct*read + (1-pct)*old;
 }
   public void settings() {  size(800, 600, P2D); }
   static public void main(String[] passedArgs) {
