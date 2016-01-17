@@ -1,6 +1,66 @@
 import controlP5.*;
 import processing.serial.*;
 
+class Obj_Kalman
+{
+  float Qt,
+        Qtb,
+        R,
+        P00,
+        P01,
+        P10,
+        P11,
+        bias,
+        ang;
+
+  Obj_Kalman(float Qt,
+        float Qtb,
+        float R,
+        float P00,
+        float P01,
+        float P10,
+        float P11,
+        float bias,
+        float ang)
+  {
+    this.Qt = Qt;
+    this.Qtb = Qtb;
+    this.R = R;
+    this.P00 = P00;
+    this.P01 = P01;
+    this.P10 = P10;
+    this.P11 = P11;
+    this.bias = bias;
+    this.ang = ang;
+  }
+
+  float kalman_step(float read_vel, float read_ang)
+  {
+    float rate = read_vel - bias;
+    ang += dt * rate;
+    P00 += dt * (dt*P11 - P01 - P10 + Qt);
+    P01 -= dt * P11;
+    P10 -= dt * P11;
+    P11 += dt * Qtb;
+    float S = P00 + R;
+    float K0 = P00/S;
+    float K1 = P10/S;
+    float temp_p00 = P00;
+    float temp_p01 = P01;
+    P00 -= K0*temp_p00;
+    P01 -= K0*temp_p01;
+    P10 -= K1*temp_p00;
+    P11 -= K1*temp_p01;
+    float y = read_ang - ang;
+    ang += K0*y;
+    bias += K1*y;
+    
+    return ang;
+  }
+}
+
+
+
 float accel_x, accel_y, accel_z, tmp,gyro_x, gyro_y, gyro_z = 0; // Valores medidos pelo sensor
 String acx, acy, acz, gyx, gyy, gyz; // Valores convertidos para mostrar na tela 
 
@@ -14,7 +74,13 @@ float dadox[] = new float[maxSize], dadoy[] = new float[maxSize], dadoz[] = new 
 float f_dadox[] = new float[maxSize], f_dadoy[] = new float[maxSize], f_dadoz[] = new float[maxSize]; // Dados a serem filtrados
 int c = 0; // Contador
 
-final float dt = 0.01; // Passo entre as medicoes (10 ms)
+Obj_Kalman k_x, k_y, k_z;
+
+float ang_x = 0,
+      ang_y = 0,
+      ang_z = 0;
+
+final float dt = 0.02; // Passo entre as medicoes (20 ms)
 
 PFont f; // Fonte do texto
 
@@ -47,7 +113,6 @@ void setup() // Inicializacao do programa
   myPort.bufferUntil('\n'); // Busca por \n
   colorMode(RGB, 1);
   f = createFont("Arial", 16, true); // Escolhendo fonte do texto como Arial 16
-  
   cp5 = new ControlP5(this);
   axismode = cp5.addDropdownList("Modo YT", 10, 220, 100, 84);
   fillmode = cp5.addDropdownList("Pontos", 120, 220, 100, 84);
@@ -69,6 +134,33 @@ void setup() // Inicializacao do programa
   filter_create(filter); // Cria a lista filter
   sample_create(sample); // Cria a lista sample
   
+  k_x = new Obj_Kalman(0.001, // Qt
+        0.03, // Qtb
+        0.03, // R
+        0, // P00
+        0, // P01
+        0, // P10
+        0, // P11
+        0, // bias
+        0); // ang
+   k_y = new Obj_Kalman(0.001, // Qt
+        0.03, // Qtb
+        0.03, // R
+        0, // P00
+        0, // P01
+        0, // P10
+        0, // P11
+        0, // bias
+        0); // ang
+   k_z = new Obj_Kalman(0.001, // Qt
+        0.03, // Qtb
+        0.03, // R
+        0, // P00
+        0, // P01
+        0, // P10
+        0, // P11
+        0, // bias
+        0); // ang
 }
 
 void draw() // Rotina em repeticao permanente
@@ -77,6 +169,12 @@ void draw() // Rotina em repeticao permanente
   textFont(f, 16); // Fonte tamanho 16
   rectMode(CORNERS); // Modo de desenho dos retangulos como CORNERS
   int i; // Variavel geral de laco
+  ang_x = k_x.kalman_step(conv_gy(gyro_x, 0), ang_x);
+    text("Angulo x: " + nf(ang_x,1,0) + "º", 10, 540);
+  ang_y = k_y.kalman_step(conv_gy(gyro_y, 0), ang_y);
+    text("Angulo y: " + nf(ang_y,1,0) + "º", 10, 560);
+  ang_z = k_z.kalman_step(conv_gy(gyro_z, 0), ang_z);
+    text("Angulo z: " + nf(ang_z,1,0) + "º", 10, 580);
   switch(int(sample.getValue())) // Selecao de quantidade de dados gravados por ciclo
   {
     case 0:
