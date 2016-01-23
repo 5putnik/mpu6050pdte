@@ -115,6 +115,7 @@ DropdownList axismode, // lista para escolher o modo eixo (XY ou YT)
              ac_unit, // lista de unidade do acelerometro (m/s\u00b2 ou g)
              gy_unit, // lista de unidade do giroscopio (\u00ba/s ou rad/s)
              filter, // lista de filtros
+             scale, // lista de escalas
              sample; // selecao de dados amostrados
              
 final int XMAX = 800, // Parametro: Tamanho X da tela
@@ -127,6 +128,7 @@ int mode_xy = 1, // 1: Modo XY, 0: Modo YT
     mode_y = 1, // Modo de selecao do eixo Y (modo XY) ou variavel 2 (modo YT)
     mode_z = 1, // Modo de selecao variavel 3 (apenas modo YT)
     mode_filter = 1, // 1: Filtro passa-baixas selecionado, 0: Valores crus
+    mode_scale = 1, // Modo de selecao de escala
     mode_sample = 1; // Modo de selecao da taxa de dados salvos por ciclo
     
 public void setup() // Inicializacao do programa
@@ -145,17 +147,21 @@ public void setup() // Inicializacao do programa
   ac_unit = cp5.addDropdownList("m/s^2", 270, 20, 100, 84); // Insercao da lista ac_unit
   gy_unit = cp5.addDropdownList("grau/s", 270, 100, 100, 84); // Insercao da lista gy_unit
   filter = cp5.addDropdownList("Raw", XMAX/2 + 45, 2*gap + sqrwidth, 100, 84); // Insercao da lista filter
-  sample = cp5.addDropdownList("400 (padrao)", XMAX/2 + 245, 2*gap + sqrwidth, 100, 84); // Insercao da lista sample
+  scale = cp5.addDropdownList("1x", XMAX/2 + 150, 2*gap + sqrwidth, 100, 84); // Insercao da lista scale
+  sample = cp5.addDropdownList("400 (padrao)", XMAX/2 + 255, 2*gap + sqrwidth, 100, 84); // Insercao da lista sample
   
- // Insercao da lista axismode  axis_create(axismode); // Cria a lista axismode
-  fill_create(fillmode); // Cria a lista fillmode
-  x_create(valorx); // Cria a lista valorx
-  y_create(valory); // Cria a lista valory
-  z_create(valorz); // Cria a lista valorz
-  ac_create(ac_unit); // Cria a lista ac_unit
-  gy_create(gy_unit); // Cria a lista gy_unit
-  filter_create(filter); // Cria a lista filter
-  sample_create(sample); // Cria a lista sample
+  ddl_standard(axismode, "Modo YT:Modo XY"); // Cria a lista axismode
+  ddl_standard(fillmode, "Pontos:Linhas"); // Cria a lista fillmode
+  ddl_standard(scale, "1x:2x:3x:4x:5x"); // Cria a lista scale
+  ddl_standard(filter, "Raw:Low-pass"); // Cria a lista filter
+  ddl_standard(sample, "400 (padrao):50:100:200:250:500:750:1000"); // Cria a lista filter
+  ddl_standard(ac_unit, "m/s^2:g"); // Cria a lista ac_unit
+  ddl_standard(gy_unit, "grau/s:rad/s"); // Cria a lista gy_unit
+  ddl_standard(valorx, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valorx
+  ddl_standard(valory, "Acel Y:Acel X:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valory
+  ddl_standard(valorz, "Acel Z:Acel Y:Acel X:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valorz
+  
+  
   
   valorx.setBackgroundColor(color(255, 0, 0)); // Cor de fundo da lista
   valory.setBackgroundColor(color(0, 255, 0)); // Cor de fundo da lista
@@ -246,7 +252,13 @@ public void draw() // Rotina em repeticao permanente
   if(c == vSize) // Se o programa encontra-se no valor maximo de dados que se pode salvar
     c = 0; // Sobrescreve o dado mais antigo
   
-  if(mode_x != PApplet.parseInt(valorx.getValue()) || mode_y != PApplet.parseInt(valory.getValue()) || mode_z != PApplet.parseInt(valorz.getValue()) || mode_filter != PApplet.parseInt(filter.getValue()) || mode_xy != PApplet.parseInt(axismode.getValue()) || mode_sample != PApplet.parseInt(sample.getValue())) // Se o grafico for alterado
+  if(mode_x != PApplet.parseInt(valorx.getValue()) || 
+     mode_y != PApplet.parseInt(valory.getValue()) || 
+     mode_z != PApplet.parseInt(valorz.getValue()) || 
+     mode_filter != PApplet.parseInt(filter.getValue()) || 
+     mode_xy != PApplet.parseInt(axismode.getValue()) || 
+     mode_sample != PApplet.parseInt(sample.getValue()) || 
+     mode_scale != PApplet.parseInt(scale.getValue())) // Se o grafico for alterado
     for(i=0;i<vSize;i++)
     {
       dadox[i] = 0; // Reseta (limpa) eixo X (modo XY) ou o valor 1 (modo YT) do grafico
@@ -260,6 +272,7 @@ public void draw() // Rotina em repeticao permanente
   mode_y = PApplet.parseInt(valory.getValue()); // Salvando alteracoes na lista
   mode_z = PApplet.parseInt(valorz.getValue()); // Salvando alteracoes na lista
   mode_filter = PApplet.parseInt(filter.getValue()); // Salvando alteracoes na lista
+  mode_scale = PApplet.parseInt(scale.getValue());  // Salvando alteracoes na lista
   
   switch(PApplet.parseInt(valorx.getValue())) // Selecao de variavel eixo X
   {
@@ -323,10 +336,10 @@ public void draw() // Rotina em repeticao permanente
   mode_xy = PApplet.parseInt(axismode.getValue()); // Le lista axismode
   mode_line = PApplet.parseInt(fillmode.getValue()); // Le lista fillmode
   
-  dadoy[c] = gap + sqrwidth/2 - (f_dadoy[c] * sqrwidth/2) / 32768; // Dados de plot do eixo y
+  dadoy[c] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadoy[c] * sqrwidth/2) / 32768; // Dados de plot do eixo y
   if(mode_xy != 0)
   {
-    dadox[c] = XMAX - (gap + sqrwidth/2) + (f_dadox[c] * sqrwidth/2) / 32768; // Dados de plot do eixo x
+    dadox[c] = XMAX - (gap + sqrwidth/2) + (1 + mode_scale)*(f_dadox[c] * sqrwidth/2) / 32768; // Dados de plot do eixo x
     valorz.hide();
     line(XMAX - (gap + sqrwidth/2), gap, XMAX - (gap + sqrwidth/2), sqrwidth + gap); // Eixo Y do plano cartesiano
     fill(0, 255, 0); // Preenche proximos desenhos de verde
@@ -342,8 +355,8 @@ public void draw() // Rotina em repeticao permanente
   else
   {
     valorz.show();
-    dadox[c] = gap + sqrwidth/2 - (f_dadox[c] * sqrwidth/2) / 32768; // Dados de plot 1
-    dadoz[c] = gap + sqrwidth/2 - (f_dadoz[c] * sqrwidth/2) / 32768; // Dados de plot 3
+    dadox[c] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadox[c] * sqrwidth/2) / 32768; // Dados de plot 1
+    dadoz[c] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadoz[c] * sqrwidth/2) / 32768; // Dados de plot 3
     for(i=1;i<vSize;i++)
     {
       stroke(255, 0, 0); // Habilita linhas de contorno vermelhos
@@ -451,98 +464,12 @@ public void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrit
   }
 }
 
-public void axis_create(DropdownList ddl) // Customizar a lista axismode 
+public void ddl_standard(DropdownList ddl, String s) // Customizacao padrao de toda lista
 {
-  ddl_standard(ddl); // Parametros iniciais da lista
-  ddl.addItem("Modo YT", 0); // Adicionado item
-  ddl.addItem("Modo XY", 1); // Adicionado item
-}
-
-public void fill_create(DropdownList ddl) // Customizar a lista fillmode
-{
-  ddl_standard(ddl); // Parametros iniciais da lista
-  ddl.addItem("Pontos", 0); // Adicionado item
-  ddl.addItem("Linhas", 0); // Adicionado item
-}
-
-public void x_create(DropdownList ddl) // Customizar a lista valorx
-{
-  ddl_standard(ddl); // Parametros iniciais da lista
-  ddl.addItem("Acel X", 0); // Adicionado item
-  ddl.addItem("Acel Y", 1); // Adicionado item
-  ddl.addItem("Acel Z", 2); // Adicionado item
-  ddl.addItem("Gyro X", 3); // Adicionado item
-  ddl.addItem("Gyro Y", 4); // Adicionado item
-  ddl.addItem("Gyro Z", 5); // Adicionado item
-  ddl.addItem("Ang X", 6); // Adicionado item
-  ddl.addItem("Ang Y", 7); // Adicionado item
-  ddl.addItem("Ang Z", 8); // Adicionado item
-}
-
-public void y_create(DropdownList ddl) // Customizar a lista valory
-{
-  ddl_standard(ddl); // Parametros iniciais da lista
-  ddl.addItem("Acel Y", 0); // Adicionado item
-  ddl.addItem("Acel X", 1); // Adicionado item
-  ddl.addItem("Acel Z", 2); // Adicionado item
-  ddl.addItem("Gyro X", 3); // Adicionado item
-  ddl.addItem("Gyro Y", 4); // Adicionado item
-  ddl.addItem("Gyro Z", 5); // Adicionado item
-  ddl.addItem("Ang X", 6); // Adicionado item
-  ddl.addItem("Ang Y", 7); // Adicionado item
-  ddl.addItem("Ang Z", 8); // Adicionado item
-}
-
-public void z_create(DropdownList ddl) // Customizar a lista valorz
-{
-  ddl_standard(ddl); // Parametros iniciais da lista
-  ddl.addItem("Acel Z", 0); // Adicionado item
-  ddl.addItem("Acel Y", 1); // Adicionado item
-  ddl.addItem("Acel X", 2); // Adicionado item
-  ddl.addItem("Gyro X", 3); // Adicionado item
-  ddl.addItem("Gyro Y", 4); // Adicionado item
-  ddl.addItem("Gyro Z", 5); // Adicionado item
-  ddl.addItem("Ang X", 6); // Adicionado item
-  ddl.addItem("Ang Y", 7); // Adicionado item
-  ddl.addItem("Ang Z", 8); // Adicionado item
-}
-
-public void ac_create(DropdownList ddl) // Customizar a lista do acelerometro
-{
-  ddl_standard(ddl); // Parametros iniciais da lista
-  ddl.addItem("m/s^2", 0); // Adicionado item
-  ddl.addItem("g", 1); // Adicionado item
-}
-
-public void gy_create(DropdownList ddl) // Customizar a lista do giroscopio
-{
-  ddl_standard(ddl); // Parametros iniciais da lista
-  ddl.addItem("grau/s", 0); // Adicionado item
-  ddl.addItem("rad/s", 1); // Adicionado item
-}
-
-public void filter_create(DropdownList ddl) // Customizar a lista do filtro
-{
-  ddl_standard(ddl); // Parametros iniciais da lista
-  ddl.addItem("Raw", 0); // Adicionado item
-  ddl.addItem("Low-pass", 1); // Adicionado item
-}
-
-public void sample_create(DropdownList ddl) // Customizar a lista do filtro
-{
-  ddl_standard(ddl); // Parametros iniciais da lista
-  ddl.addItem("400 (padrao)", 0); // Adicionado item
-  ddl.addItem("50", 1); // Adicionado item
-  ddl.addItem("100", 2); // Adicionado item
-  ddl.addItem("200", 3); // Adicionado item
-  ddl.addItem("250", 3); // Adicionado item
-  ddl.addItem("500", 5); // Adicionado item
-  ddl.addItem("750", 6); // Adicionado item
-  ddl.addItem("1000", 7); // Adicionado item
-}
-
-public void ddl_standard(DropdownList ddl) // Customizacao padrao de toda lista
-{
+  String  temp[]  =  split(s,":"); // Separar os dados cada vez que dois-pontos for encontrado
+  int iMax = temp.length;
+  for(int i=0;i<iMax;i++)
+    ddl.addItem(temp[i], i); // Adicionado item
   ddl.setBackgroundColor(color(220)); // Cor de fundo da lista
   ddl.setItemHeight(20); // Tamanho de cada item mostrado
   ddl.setBarHeight(15); // Tamanho da barra
