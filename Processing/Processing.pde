@@ -88,6 +88,7 @@ final float dt = 0.02; // Passo entre as medicoes (20 ms)
 PFont f; // Fonte do texto
 
 ControlP5 cp5; // Controle para utilizar objetos
+CheckBox cb_save; // CheckBox para salvar arquivos
 DropdownList axismode, // lista para escolher o modo eixo (XY ou YT)
              fillmode, // lista para escolher o modo preenchimento (linha ou ponto)
              valorx, // lista de valores a serem plotados (Eixo X ou valor 1)
@@ -97,7 +98,10 @@ DropdownList axismode, // lista para escolher o modo eixo (XY ou YT)
              gy_unit, // lista de unidade do giroscopio (º/s ou rad/s)
              filter, // lista de filtros
              scale, // lista de escalas
-             sample; // selecao de dados amostrados
+             sample, // selecao de dados amostrados
+             savemode; // modo de armazenamento
+
+int checksave = 0; // Variavel para detectar se o arquivo foi salvo uma vez
              
 final int XMAX = 800, // Parametro: Tamanho X da tela
           gap = 10, // Parametro: espacamento geral
@@ -130,6 +134,7 @@ void setup() // Inicializacao do programa
   filter = cp5.addDropdownList("Raw", XMAX/2 + 45, 2*gap + sqrwidth, 100, 84); // Insercao da lista filter
   scale = cp5.addDropdownList("1x", XMAX/2 + 150, 2*gap + sqrwidth, 100, 84); // Insercao da lista scale
   sample = cp5.addDropdownList("400 (padrao)", XMAX/2 + 255, 2*gap + sqrwidth, 100, 84); // Insercao da lista sample
+  savemode = cp5.addDropdownList("Salvar uma vez", 120, 300, 100, 84); // Insercao da lista savemode
   
   ddl_standard(axismode, "Modo YT:Modo XY"); // Cria a lista axismode
   ddl_standard(fillmode, "Pontos:Linhas"); // Cria a lista fillmode
@@ -141,8 +146,9 @@ void setup() // Inicializacao do programa
   ddl_standard(valorx, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valorx
   ddl_standard(valory, "Acel Y:Acel X:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valory
   ddl_standard(valorz, "Acel Z:Acel Y:Acel X:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valorz
+  ddl_standard(savemode, "Salvar uma vez:Sobrepor arquivo"); // Cria a lista savemode
   
-  
+  cb_save = cb_standard("Salvar arquivo?", 10, 300);
   
   valorx.setBackgroundColor(color(255, 0, 0)); // Cor de fundo da lista
   valory.setBackgroundColor(color(0, 255, 0)); // Cor de fundo da lista
@@ -230,8 +236,42 @@ void draw() // Rotina em repeticao permanente
   }
 
   c++; // Contando em qual execucao esta
+  
   if(c == vSize) // Se o programa encontra-se no valor maximo de dados que se pode salvar
+  {
     c = 0; // Sobrescreve o dado mais antigo
+    // Salvando o Arquivo
+    if((int)cb_save.getArrayValue()[0] == 1)
+    {
+      switch(int(savemode.getValue()))
+      {
+        case 0:
+          cb_save.toggle(0);
+        case 1:
+          Table tbl = new Table(); 
+          tbl.setString(0,0,"sep=");
+          tbl.setString(1,0,"Dado 1");
+          tbl.setString(1,1,"Dado 2");
+          if(mode_xy == 0)
+            tbl.setString(1,2,"Dado 3");
+          
+          for(i=0;i<vSize;i++)
+          {
+             tbl.setInt(i+2, 0, (int)f_dadox[i]);
+             tbl.setInt(i+2, 1, (int)f_dadoy[i]);
+             if(mode_xy == 0)
+               tbl.setInt(i+2, 2, (int)f_dadoz[i]);
+          }
+          saveTable(tbl, "output.csv");
+          break;
+      }
+    }
+  }
+  
+  if((int)cb_save.getArrayValue()[0] == 1) // Se cb_save estiver marcada
+      savemode.show(); // Mostrar savemode se a CheckBox estiver smarcada
+    else
+      savemode.hide(); // Ocultar savemode se a CheckBox estiver desmarcada
   
   if(mode_x != int(valorx.getValue()) || 
      mode_y != int(valory.getValue()) || 
@@ -417,6 +457,8 @@ void draw() // Rotina em repeticao permanente
     text("Leitura giroscopio Z: " + gyz, 10, 140); // Imprime valor lido
     text("Temperatura: " + tmp + "ºC", 10, 180); // Imprime valor lido
   }
+  
+
 }
 
 void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na porta serial
@@ -457,6 +499,17 @@ void ddl_standard(DropdownList ddl, String s) // Customizacao padrao de toda lis
   ddl.setColorBackground(color(60)); // Cor do fundo para itens e barra
   ddl.setColorActive(color(255,128)); // Cor do item quando ativado por mouse
   ddl.close();
+}
+
+CheckBox cb_standard(String title, int xpos, int ypos)
+{
+  return cp5.addCheckBox("cb_" + title)
+                .setPosition(xpos, ypos)
+                .setColorForeground(color(120))
+                .setColorActive(color(255, 0, 0))
+                .setColorLabel(color(255))
+                .setSize(20, 20)
+                .addItem(title, 0);
 }
 
 float lowpass(float read, float old, float pct)
