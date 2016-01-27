@@ -80,7 +80,7 @@ float ang_x = 0, // Valor Angulo X em graus
 
 float grav_x, grav_y, grav_z; // Componentes da gravidade
 float gx = 0, // Leitura inicial da gravidade
-      gy = 32768/reg_ac, // Leitura inicial da gravidade (admite-se gravidade atuando unicamente no eixo Y)
+      gy = 1, // Leitura inicial da gravidade (admite-se gravidade atuando unicamente no eixo Y)
       gz = 0; // Leitura inicial da gravidade
 
 final float dt = 0.02; // Passo entre as medicoes (20 ms)
@@ -88,6 +88,7 @@ final float dt = 0.02; // Passo entre as medicoes (20 ms)
 PFont f; // Fonte do texto
 
 ControlP5 cp5; // Controle para utilizar objetos
+CheckBox cb_save; // CheckBox para salvar arquivos
 DropdownList axismode, // lista para escolher o modo eixo (XY ou YT)
              fillmode, // lista para escolher o modo preenchimento (linha ou ponto)
              valorx, // lista de valores a serem plotados (Eixo X ou valor 1)
@@ -97,7 +98,10 @@ DropdownList axismode, // lista para escolher o modo eixo (XY ou YT)
              gy_unit, // lista de unidade do giroscopio (º/s ou rad/s)
              filter, // lista de filtros
              scale, // lista de escalas
-             sample; // selecao de dados amostrados
+             sample, // selecao de dados amostrados
+             savemode; // modo de armazenamento
+
+int checksave = 0; // Variavel para detectar se o arquivo foi salvo uma vez
              
 final int XMAX = 800, // Parametro: Tamanho X da tela
           gap = 10, // Parametro: espacamento geral
@@ -112,6 +116,8 @@ int mode_xy = 1, // 1: Modo XY, 0: Modo YT
     mode_scale = 1, // Modo de selecao de escala
     mode_sample = 1; // Modo de selecao da taxa de dados salvos por ciclo
     
+float scx, scy, scz; // Escala para plot (2g, 4g, 8g, 16g, 250º/s, 500º/s, 1000º/s etc)
+
 void setup() // Inicializacao do programa
 {
   size(800, 600, P2D); // Gerando uma tela 800x600 com renderizacao 2D melhorada
@@ -130,6 +136,7 @@ void setup() // Inicializacao do programa
   filter = cp5.addDropdownList("Raw", XMAX/2 + 45, 2*gap + sqrwidth, 100, 84); // Insercao da lista filter
   scale = cp5.addDropdownList("1x", XMAX/2 + 150, 2*gap + sqrwidth, 100, 84); // Insercao da lista scale
   sample = cp5.addDropdownList("400 (padrao)", XMAX/2 + 255, 2*gap + sqrwidth, 100, 84); // Insercao da lista sample
+  savemode = cp5.addDropdownList("Salvar uma vez", 120, 300, 100, 84); // Insercao da lista savemode
   
   ddl_standard(axismode, "Modo YT:Modo XY"); // Cria a lista axismode
   ddl_standard(fillmode, "Pontos:Linhas"); // Cria a lista fillmode
@@ -141,8 +148,9 @@ void setup() // Inicializacao do programa
   ddl_standard(valorx, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valorx
   ddl_standard(valory, "Acel Y:Acel X:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valory
   ddl_standard(valorz, "Acel Z:Acel Y:Acel X:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valorz
+  ddl_standard(savemode, "Salvar uma vez:Sobrepor arquivo:Salvar continuamente"); // Cria a lista savemode
   
-  
+  cb_save = cb_standard("Salvar arquivo?", 10, 300); // Cria o CheckBox cb_save
   
   valorx.setBackgroundColor(color(255, 0, 0)); // Cor de fundo da lista
   valory.setBackgroundColor(color(0, 255, 0)); // Cor de fundo da lista
@@ -176,6 +184,9 @@ void setup() // Inicializacao do programa
         0, // P11
         0, // bias
         0); // ang
+  String tbl[] = new String[1]; // Inicializando arquivo de output ao inicializar o programa
+  tbl[0] = "blablabla"; // Preenchendo a primeira linha com qualquer coisa para sobrescrever qualquer arquivo que possa existir
+  saveStrings("output.csv", tbl); // Salvando arquivo sob o nome de output.csv
 }
 
 void draw() // Rotina em repeticao permanente
@@ -185,21 +196,21 @@ void draw() // Rotina em repeticao permanente
   rectMode(CORNERS); // Modo de desenho dos retangulos como CORNERS
   int i; // Variavel geral de laco
   
-  ang_x = k_x.kalman_step(conv_gy(gyro_x, 0), ang_x); // Filtro de Kalman para selecionar o angulo
-  ang_y = k_y.kalman_step(conv_gy(gyro_y, 0), ang_y); // Filtro de Kalman para selecionar o angulo
-  ang_z = k_z.kalman_step(conv_gy(gyro_z, 0), ang_z); // Filtro de Kalman para selecionar o angulo
+  ang_x = k_x.kalman_step(gyro_x, ang_x); // Filtro de Kalman para selecionar o angulo
+  ang_y = k_y.kalman_step(gyro_y, ang_y); // Filtro de Kalman para selecionar o angulo
+  ang_z = k_z.kalman_step(gyro_z, ang_z); // Filtro de Kalman para selecionar o angulo
   
   grav_x = rot(gx, gy, gz, ang_x*PI/180, ang_y*PI/180, ang_z*PI/180, 0); // Rotacionando o vetor (gx,gy,gz) com as leituras do giroscopio
   grav_y = rot(gx, gy, gz, ang_x*PI/180, ang_y*PI/180, ang_z*PI/180, 1); // Rotacionando o vetor (gx,gy,gz) com as leituras do giroscopio
   grav_z = rot(gx, gy, gz, ang_x*PI/180, ang_y*PI/180, ang_z*PI/180, 2); // Rotacionando o vetor (gx,gy,gz) com as leituras do giroscopio
   
-  text("Gravidade x: " + nf(conv_ac(grav_x,0),1,0) + "m/s² (" + nf(conv_ac(grav_x,1),1,0) + " g)", 10, 480); // Imprimindo o valor da gravidade na tela
-  text("Gravidade y: " + nf(conv_ac(grav_y,0),1,0) + "m/s² (" + nf(conv_ac(grav_y,1),1,0) + " g)", 10, 500); // Imprimindo o valor da gravidade na tela
-  text("Gravidade z: " + nf(conv_ac(grav_z,0),1,0) + "m/s² (" + nf(conv_ac(grav_z,1),1,0) + " g)", 10, 520); // Imprimindo o valor da gravidade na tela
+  text("Gravidade x: " + nf(grav_x * 9.81, 1, 0) + "m/s² (" + nf(grav_x, 1, 0) + " g)", 10, 480); // Imprimindo o valor da gravidade na tela
+  text("Gravidade y: " + nf(grav_y * 9.81, 1, 0) + "m/s² (" + nf(grav_y, 1, 0) + " g)", 10, 500); // Imprimindo o valor da gravidade na tela
+  text("Gravidade z: " + nf(grav_z * 9.81, 1, 0) + "m/s² (" + nf(grav_z, 1, 0) + " g)", 10, 520); // Imprimindo o valor da gravidade na tela
   
-  text("Angulo x: " + nf(ang_x,1,0) + "º", 10, 540); // Imprimindo o valor do angulo na tela
-  text("Angulo y: " + nf(ang_y,1,0) + "º", 10, 560); // Imprimindo o valor do angulo na tela
-  text("Angulo z: " + nf(ang_z,1,0) + "º", 10, 580); // Imprimindo o valor do angulo na tela
+  text("Angulo x: " + nf(ang_x, 1, 0) + "º", 10, 540); // Imprimindo o valor do angulo na tela
+  text("Angulo y: " + nf(ang_y, 1, 0) + "º", 10, 560); // Imprimindo o valor do angulo na tela
+  text("Angulo z: " + nf(ang_z, 1, 0) + "º", 10, 580); // Imprimindo o valor do angulo na tela
   
   switch(int(sample.getValue())) // Selecao de quantidade de dados gravados por ciclo
   {
@@ -230,8 +241,35 @@ void draw() // Rotina em repeticao permanente
   }
 
   c++; // Contando em qual execucao esta
+  
   if(c == vSize) // Se o programa encontra-se no valor maximo de dados que se pode salvar
+  {
     c = 0; // Sobrescreve o dado mais antigo
+    // Salvando o Arquivo
+    if((int)cb_save.getArrayValue()[0] == 1)
+    {
+      switch(int(savemode.getValue()))
+      {
+        case 0:
+          cb_save.toggle(0);
+        case 1:
+          writecsv(0, f_dadox, f_dadoy, f_dadoz, "output.csv");
+          break;
+          case 2:
+          String doc[] = loadStrings("output.csv");
+          if(doc.length == 1)
+            writecsv(0, f_dadox, f_dadoy, f_dadoz, "output.csv");
+          else
+            writecsv(1, f_dadox, f_dadoy, f_dadoz, "output.csv");
+          
+      }
+    }
+  }
+  
+  if((int)cb_save.getArrayValue()[0] == 1) // Se cb_save estiver marcada
+      savemode.show(); // Mostrar savemode se a CheckBox estiver smarcada
+    else
+      savemode.hide(); // Ocultar savemode se a CheckBox estiver desmarcada
   
   if(mode_x != int(valorx.getValue()) || 
      mode_y != int(valory.getValue()) || 
@@ -259,28 +297,36 @@ void draw() // Rotina em repeticao permanente
   {
     case 0:
       f_dadox[c] = accel_x;
+      scx = reg_ac;
       break;
     case 1:
       f_dadox[c] = accel_y;
+      scx = reg_ac;
       break;
     case 2:
       f_dadox[c] = accel_z;
+      scx = reg_ac;
       break;
     default:
+    scx = reg_gy;
       f_dadox[c] = getdata(int(valorx.getValue()));
   }
   switch(int(valory.getValue())) // Selecao de variavel eixo Y
   {
     case 0:
       f_dadoy[c] = accel_y;
+      scy = reg_ac;
       break;
     case 1:
       f_dadoy[c] = accel_z;
+      scy = reg_ac;
       break;
     case 2:
       f_dadoy[c] = accel_x;
+      scy = reg_ac;
       break;
     default:
+      scy = reg_gy;
       f_dadoy[c] = getdata(int(valory.getValue()));
   }
   
@@ -288,14 +334,18 @@ void draw() // Rotina em repeticao permanente
   {
     case 0:
       f_dadoz[c] = accel_z;
+      scz = reg_ac;
       break;
     case 1:
       f_dadoz[c] = accel_y;
+      scz = reg_ac;
       break;
     case 2:
       f_dadoz[c] = accel_x;
+      scz = reg_ac;
       break;
     default:
+      scz = reg_gy;
       f_dadoz[c] = getdata(int(valorz.getValue()));
   }
   
@@ -317,10 +367,10 @@ void draw() // Rotina em repeticao permanente
   mode_xy = int(axismode.getValue()); // Le lista axismode
   mode_line = int(fillmode.getValue()); // Le lista fillmode
   
-  dadoy[c] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadoy[c] * sqrwidth/2) / 32768; // Dados de plot do eixo y
+  dadoy[c] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadoy[c] * sqrwidth/2) / scy; // Dados de plot do eixo y
   if(mode_xy != 0)
   {
-    dadox[c] = XMAX - (gap + sqrwidth/2) + (1 + mode_scale)*(f_dadox[c] * sqrwidth/2) / 32768; // Dados de plot do eixo x
+    dadox[c] = XMAX - (gap + sqrwidth/2) + (1 + mode_scale)*(f_dadox[c] * sqrwidth/2) / scx; // Dados de plot do eixo x
     valorz.hide();
     line(XMAX - (gap + sqrwidth/2), gap, XMAX - (gap + sqrwidth/2), sqrwidth + gap); // Eixo Y do plano cartesiano
     fill(0, 255, 0); // Preenche proximos desenhos de verde
@@ -336,8 +386,8 @@ void draw() // Rotina em repeticao permanente
   else
   {
     valorz.show();
-    dadox[c] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadox[c] * sqrwidth/2) / 32768; // Dados de plot 1
-    dadoz[c] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadoz[c] * sqrwidth/2) / 32768; // Dados de plot 3
+    dadox[c] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadox[c] * sqrwidth/2) / scx; // Dados de plot 1
+    dadoz[c] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadoz[c] * sqrwidth/2) / scz; // Dados de plot 3
     for(i=1;i<vSize;i++)
     {
       stroke(255, 0, 0); // Habilita linhas de contorno vermelhos
@@ -366,28 +416,28 @@ void draw() // Rotina em repeticao permanente
   switch(int(ac_unit.getValue())) // Selecao de unidade do acelerometro
   {
     case 0:
-      acx = nf(conv_ac(accel_x, 0), 1, 2) + " m/s²"; // Conversao para valores fisicos (metro por segundo ao quadrado)
-      acy = nf(conv_ac(accel_y, 0), 1, 2) + " m/s²"; // Conversao para valores fisicos (metro por segundo ao quadrado)
-      acz = nf(conv_ac(accel_z, 0), 1, 2) + " m/s²"; // Conversao para valores fisicos (metro por segundo ao quadrado)
+      acx = nf(accel_x * 9.81, 1, 2) + " m/s²"; // Conversao para valores fisicos (metro por segundo ao quadrado)
+      acy = nf(accel_y * 9.81, 1, 2) + " m/s²"; // Conversao para valores fisicos (metro por segundo ao quadrado)
+      acz = nf(accel_z * 9.81, 1, 2) + " m/s²"; // Conversao para valores fisicos (metro por segundo ao quadrado)
       break;
     case 1:
-      acx = nf(conv_ac(accel_x, 1), 1, 2) + " g"; // Conversao para valores fisicos (gravidades)
-      acy = nf(conv_ac(accel_y, 1), 1, 2) + " g"; // Conversao para valores fisicos (gravidades)
-      acz = nf(conv_ac(accel_z, 1), 1, 2) + " g"; // Conversao para valores fisicos (gravidades)
+      acx = nf(accel_x, 1, 2) + " g"; // Conversao para valores fisicos (gravidades)
+      acy = nf(accel_y, 1, 2) + " g"; // Conversao para valores fisicos (gravidades)
+      acz = nf(accel_z, 1, 2) + " g"; // Conversao para valores fisicos (gravidades)
       break;
   }
 
   switch(int(gy_unit.getValue())) // Selecao de unidade do giroscopio
   {
     case 0:
-      gyx = nf(conv_gy(gyro_x, 0), 1, 2) + " º/seg"; // Conversao para valores fisicos (graus por segundo)
-      gyy = nf(conv_gy(gyro_y, 0), 1, 2) + " º/seg"; // Conversao para valores fisicos (graus por segundo)
-      gyz = nf(conv_gy(gyro_z, 0), 1, 2) + " º/seg"; // Conversao para valores fisicos (graus por segundo)
+      gyx = nf(gyro_x, 1, 2) + " º/seg"; // Conversao para valores fisicos (graus por segundo)
+      gyy = nf(gyro_y, 1, 2) + " º/seg"; // Conversao para valores fisicos (graus por segundo)
+      gyz = nf(gyro_z, 1, 2) + " º/seg"; // Conversao para valores fisicos (graus por segundo)
       break;
     case 1:
-      gyx = nf(conv_gy(gyro_x, 1), 1, 2) + " rad/seg"; // Conversao para valores fisicos (radianos por segundo)
-      gyy = nf(conv_gy(gyro_y, 1), 1, 2) + " rad/seg"; // Conversao para valores fisicos (radianos por segundo)
-      gyz = nf(conv_gy(gyro_z, 1), 1, 2) + " rad/seg"; // Conversao para valores fisicos (radianos por segundo)
+      gyx = nf(gyro_x * PI/180, 1, 2) + " rad/seg"; // Conversao para valores fisicos (radianos por segundo)
+      gyy = nf(gyro_y * PI/180, 1, 2) + " rad/seg"; // Conversao para valores fisicos (radianos por segundo)
+      gyz = nf(gyro_z * PI/180, 1, 2) + " rad/seg"; // Conversao para valores fisicos (radianos por segundo)
       break;
   }
 
@@ -417,6 +467,8 @@ void draw() // Rotina em repeticao permanente
     text("Leitura giroscopio Z: " + gyz, 10, 140); // Imprime valor lido
     text("Temperatura: " + tmp + "ºC", 10, 180); // Imprime valor lido
   }
+  
+
 }
 
 void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na porta serial
@@ -434,13 +486,13 @@ void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na po
        * Sendo cada numero entre os dois-pontos uma das leituras, na ordem:
        * acelerometro x, y, z, temperatura, giroscopio x, y, z
        * */
-      accel_x = float(temp[1]); // Atualiza variavel global
-      accel_y = float(temp[2]); // Atualiza variavel global
-      accel_z = float(temp[3]); // Atualiza variavel global
+      accel_x = (float(temp[1]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
+      accel_y = (float(temp[2]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
+      accel_z = (float(temp[3]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       tmp = float(temp[4]); // Atualiza variavel global
-      gyro_x = float(temp[5]); // Atualiza variavel global
-      gyro_y = float(temp[6]); // Atualiza variavel global
-      gyro_z = float(temp[7]); // Atualiza variavel global
+      gyro_x = (float(temp[5]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
+      gyro_y = (float(temp[6]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
+      gyro_z = (float(temp[7]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
     }
   }
 }
@@ -459,25 +511,20 @@ void ddl_standard(DropdownList ddl, String s) // Customizacao padrao de toda lis
   ddl.close();
 }
 
+CheckBox cb_standard(String title, int xpos, int ypos)
+{
+  return cp5.addCheckBox("cb_" + title)
+                .setPosition(xpos, ypos)
+                .setColorForeground(color(120))
+                .setColorActive(color(255, 0, 0))
+                .setColorLabel(color(255))
+                .setSize(20, 20)
+                .addItem(title, 0);
+}
+
 float lowpass(float read, float old, float pct)
 {
   return pct*read + (1-pct)*old;
-}
-
-float conv_ac(float val, int c) // c = 0: m/s^2 , c = 1: g
-{
-  if(c == 0)
-    return (val * reg_ac * 9.81) / 32768;
-  else
-    return (val * reg_ac) / 32768;
-}
-
-float conv_gy(float val, int c) // c = 0: º/s , c = 1: g
-{
-  if(c == 0)
-    return (val * reg_gy) / 32768;
-  else
-    return (val * reg_gy * PI / 180) / 32768;
 }
 
 float getdata(int val)
@@ -520,4 +567,35 @@ float rot(float x, float y, float z, float a, float b, float c, int resp)
     default:
       return 0; // Retorna 0 para todos os outros casos (teoricamente nao poderia existir)
   }
+}
+
+void writecsv(int rFlag, float data1[], float data2[], float data3[], String fname)
+{
+  Table tbl = new Table();
+  if(rFlag == 0)
+  {
+    tbl = new Table();
+    tbl.setString(0,0,"sep=");
+    tbl.setString(1,0,"Dado 1");
+    tbl.setString(1,1,"Dado 2");
+    if(mode_xy == 0)
+    tbl.setString(1,2,"Dado 3");
+  }
+  else
+    tbl = loadTable(fname);
+  
+  TableRow line;
+  for(int i=0;i<vSize;i++)
+  {
+    line = tbl.addRow();
+    line.setFloat(0, data1[i]);
+    line.setFloat(1, data2[i]);
+    if(mode_xy == 0)
+    line.setFloat(2, data3[i]);
+  }
+  saveTable(tbl, fname);
+  
+  String lines[] = loadStrings(fname);
+  lines[0] = "sep=,";
+  saveStrings(fname, lines);
 }
