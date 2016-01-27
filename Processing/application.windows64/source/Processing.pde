@@ -1,6 +1,8 @@
 import controlP5.*;
 import processing.serial.*;
 
+final float version = 1.1;
+
 class Obj_Kalman
 {
   float Qt,
@@ -195,6 +197,8 @@ void draw() // Rotina em repeticao permanente
   textFont(f, 16); // Fonte tamanho 16
   rectMode(CORNERS); // Modo de desenho dos retangulos como CORNERS
   int i; // Variavel geral de laco
+  
+  text("v" + nf(version, 1, 0), XMAX-50, 580); 
   
   ang_x = k_x.kalman_step(gyro_x, ang_x); // Filtro de Kalman para selecionar o angulo
   ang_y = k_y.kalman_step(gyro_y, ang_y); // Filtro de Kalman para selecionar o angulo
