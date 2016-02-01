@@ -22,6 +22,24 @@ public class Processing extends PApplet {
 
 final float version = 1.1f;
 
+// Parametros fixos
+final float dt = 0.02f; // Passo entre as medicoes (20 ms)
+
+final float big_P = 50; // Parametro do filtro de Kalman: define a incerteza
+final float small_Qt = 0.002f; // Parametro do filtro de Kalman: define a velocidade de resposta
+final float small_Qtb = 0.003f; // Parametro do filtro de Kalman: define a velocidade de resposta
+final float small_R = 0.01f; // Parametro do filtro de Kalman: define a velocidade de resposta
+
+final float reg_ac = 2, // Faixa do acelerometro: +/- 2g
+            reg_gy = 250; // Faixa do giroscopio: +/- 250\u00ba/s
+
+final int maxSize = 1000; // Quantidade maxima de dados a ser salva
+
+final int XMAX = 800, // Parametro: Tamanho X da tela
+          gap = 10, // Parametro: espacamento geral
+          sqrwidth = 400; // Parametro: tamanho do grafico
+// Fim dos parametros fixos
+
 class Obj_Kalman
 {
   float Qt,
@@ -34,15 +52,7 @@ class Obj_Kalman
         bias,
         ang;
 
-  Obj_Kalman(float Qt,
-        float Qtb,
-        float R,
-        float P00,
-        float P01,
-        float P10,
-        float P11,
-        float bias,
-        float ang)
+  Obj_Kalman(float Qt, float Qtb, float R, float P00, float P01, float P10, float P11, float bias, float ang) // Definindo a estrutura de dados do filtro de Kalman
   {
     this.Qt = Qt;
     this.Qtb = Qtb;
@@ -55,7 +65,7 @@ class Obj_Kalman
     this.ang = ang;
   }
 
-  public float kalman_step(float read_vel, float read_ang)
+  public float kalman_step(float read_vel, float read_ang) // Definindo a funcao do filtro com base no valor anterior e no valor lido
   {
     float rate = read_vel - bias;
     ang += dt * rate;
@@ -73,6 +83,7 @@ class Obj_Kalman
     P10 -= K1*temp_p00;
     P11 -= K1*temp_p01;
     float y = read_ang - ang;
+    
     ang += K0*y;
     bias += K1*y;
     
@@ -80,15 +91,16 @@ class Obj_Kalman
   }
 }
 
+boolean start_prog = false;
+
 float accel_x, accel_y, accel_z, tmp,gyro_x, gyro_y, gyro_z = 0; // Valores medidos pelo sensor
 String acx, acy, acz, gyx, gyy, gyz; // Valores convertidos para mostrar na tela 
 
-final float reg_ac = 2, // Faixa do acelerometro: +/- 2g
-            reg_gy = 250; // Faixa do giroscopio: +/- 250\u00ba/s
+
 
 Serial myPort; // Porta serial do Arduino a ser lida
 int vSize = 400; // Quantidade de dados a ser salva
-final int maxSize = 1000; // Quantidade maxima de dados a ser salva
+
 float dadox[] = new float[maxSize], dadoy[] = new float[maxSize], dadoz[] = new float[maxSize]; // Dados a serem mostrados no grafico
 float f_dadox[] = new float[maxSize], f_dadoy[] = new float[maxSize], f_dadoz[] = new float[maxSize]; // Dados a serem filtrados
 int c = 0; // Contador
@@ -100,11 +112,15 @@ float ang_x = 0, // Valor Angulo X em graus
       ang_z = 0; // Valor Angulo Z em graus
 
 float grav_x, grav_y, grav_z; // Componentes da gravidade
+
+float grav = 9.81f; // Gravidade
+int g_c = 0; // Contador auxiliar para calculo da gravidade
+
 float gx = 0, // Leitura inicial da gravidade
       gy = 1, // Leitura inicial da gravidade (admite-se gravidade atuando unicamente no eixo Y)
       gz = 0; // Leitura inicial da gravidade
 
-final float dt = 0.02f; // Passo entre as medicoes (20 ms)
+
 
 PFont f; // Fonte do texto
 
@@ -124,10 +140,6 @@ DropdownList axismode, // lista para escolher o modo eixo (XY ou YT)
 
 int checksave = 0; // Variavel para detectar se o arquivo foi salvo uma vez
              
-final int XMAX = 800, // Parametro: Tamanho X da tela
-          gap = 10, // Parametro: espacamento geral
-          sqrwidth = 400; // Parametro: tamanho do grafico
-          
 int mode_xy = 1, // 1: Modo XY, 0: Modo YT
     mode_line = 1, // 1: Modo linha, 0: Modo ponto
     mode_x = 1, // Modo de selecao do eixo X (modo XY) ou variavel 1 (modo YT)
@@ -178,31 +190,31 @@ public void setup() // Inicializacao do programa
   valorz.setBackgroundColor(color(0, 0, 255)); // Cor de fundo da lista
   
   // Inicializando os parametros do filtro Kalman (Q, R, P etc.)
-  k_x = new Obj_Kalman(0.002f, // Qt
-        0.003f, // Qtb
-        0.01f, // R
-        0, // P00
+  k_x = new Obj_Kalman(small_Qt, // Qt
+        small_Qtb, // Qtb
+        small_R, // R
+        big_P, // P00
         0, // P01
         0, // P10
-        0, // P11
+        big_P, // P11
         0, // bias
         0); // ang
-   k_y = new Obj_Kalman(0.002f, // Qt
-        0.003f, // Qtb
-        0.01f, // R
-        0, // P00
+   k_y = new Obj_Kalman(small_Qt, // Qt
+        small_Qtb, // Qtb
+        small_R, // R
+        big_P, // P00
         0, // P01
         0, // P10
-        0, // P11
-        1.0f, // bias
+        big_P, // P11
+        0, // bias
         0); // ang
-   k_z = new Obj_Kalman(0.002f, // Qt
-        0.003f, // Qtb
-        0.01f, // R
-        0, // P00
+   k_z = new Obj_Kalman(small_Qt, // Qt
+        small_Qtb, // Qtb
+        small_R, // R
+        big_P, // P00
         0, // P01
         0, // P10
-        0, // P11
+        big_P, // P11
         0, // bias
         0); // ang
   String tbl[] = new String[1]; // Inicializando arquivo de output ao inicializar o programa
@@ -212,10 +224,17 @@ public void setup() // Inicializacao do programa
 
 public void draw() // Rotina em repeticao permanente
 {
+  if(!start_prog)
+    return;
   background(255, 255, 255); // Tela de fundo branca
   textFont(f, 16); // Fonte tamanho 16
   rectMode(CORNERS); // Modo de desenho dos retangulos como CORNERS
   int i; // Variavel geral de laco
+  if(g_c < 10)
+  {
+    g_c++;
+    grav = 0.04f*grav + 9.81f * 0.96f * sqrt(accel_x*accel_x + accel_y*accel_y + accel_z*accel_z); 
+  }
   
   text("v" + nf(version, 1, 0), XMAX-50, 580); 
   
@@ -227,9 +246,13 @@ public void draw() // Rotina em repeticao permanente
   grav_y = rot(gx, gy, gz, ang_x*PI/180, ang_y*PI/180, ang_z*PI/180, 1); // Rotacionando o vetor (gx,gy,gz) com as leituras do giroscopio
   grav_z = rot(gx, gy, gz, ang_x*PI/180, ang_y*PI/180, ang_z*PI/180, 2); // Rotacionando o vetor (gx,gy,gz) com as leituras do giroscopio
   
-  text("Gravidade x: " + nf(grav_x * 9.81f, 1, 0) + "m/s\u00b2 (" + nf(grav_x, 1, 0) + " g)", 10, 480); // Imprimindo o valor da gravidade na tela
-  text("Gravidade y: " + nf(grav_y * 9.81f, 1, 0) + "m/s\u00b2 (" + nf(grav_y, 1, 0) + " g)", 10, 500); // Imprimindo o valor da gravidade na tela
-  text("Gravidade z: " + nf(grav_z * 9.81f, 1, 0) + "m/s\u00b2 (" + nf(grav_z, 1, 0) + " g)", 10, 520); // Imprimindo o valor da gravidade na tela
+  text("Drifting x: " + nf(k_x.bias, 1, 0) + "\u00ba/s (" + nf(grav_x, 1, 0) + " g)", 10, 420); // Imprimindo o valor da gravidade na tela
+  text("Drifting y: " + nf(k_y.bias, 1, 0) + "\u00ba/s (" + nf(grav_y, 1, 0) + " g)", 10, 440); // Imprimindo o valor da gravidade na tela
+  text("Drifting z: " + nf(k_z.bias, 1, 0) + "\u00ba/s (" + nf(grav_z, 1, 0) + " g)", 10, 460); // Imprimindo o valor da gravidade na tela
+  
+  text("Gravidade x: " + nf(grav_x * grav, 1, 0) + "m/s\u00b2 (" + nf(grav_x, 1, 0) + " g)", 10, 480); // Imprimindo o valor da gravidade na tela
+  text("Gravidade y: " + nf(grav_y * grav, 1, 0) + "m/s\u00b2 (" + nf(grav_y, 1, 0) + " g)", 10, 500); // Imprimindo o valor da gravidade na tela
+  text("Gravidade z: " + nf(grav_z * grav, 1, 0) + "m/s\u00b2 (" + nf(grav_z, 1, 0) + " g)", 10, 520); // Imprimindo o valor da gravidade na tela
   
   text("Angulo x: " + nf(ang_x, 1, 0) + "\u00ba", 10, 540); // Imprimindo o valor do angulo na tela
   text("Angulo y: " + nf(ang_y, 1, 0) + "\u00ba", 10, 560); // Imprimindo o valor do angulo na tela
@@ -439,9 +462,9 @@ public void draw() // Rotina em repeticao permanente
   switch(PApplet.parseInt(ac_unit.getValue())) // Selecao de unidade do acelerometro
   {
     case 0:
-      acx = nf(accel_x * 9.81f, 1, 2) + " m/s\u00b2"; // Conversao para valores fisicos (metro por segundo ao quadrado)
-      acy = nf(accel_y * 9.81f, 1, 2) + " m/s\u00b2"; // Conversao para valores fisicos (metro por segundo ao quadrado)
-      acz = nf(accel_z * 9.81f, 1, 2) + " m/s\u00b2"; // Conversao para valores fisicos (metro por segundo ao quadrado)
+      acx = nf(accel_x * grav, 1, 2) + " m/s\u00b2"; // Conversao para valores fisicos (metro por segundo ao quadrado)
+      acy = nf(accel_y * grav, 1, 2) + " m/s\u00b2"; // Conversao para valores fisicos (metro por segundo ao quadrado)
+      acz = nf(accel_z * grav, 1, 2) + " m/s\u00b2"; // Conversao para valores fisicos (metro por segundo ao quadrado)
       break;
     case 1:
       acx = nf(accel_x, 1, 2) + " g"; // Conversao para valores fisicos (gravidades)
@@ -501,7 +524,8 @@ public void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrit
   {
     String  temp[]  =  split(xString,":"); // Separar os dados cada vez que dois-pontos for encontrado
     if(xString.charAt(0)  ==  '#'  &&  temp.length==8) // Se o primeiro caractere escrito for cerquilha e 8 elementos forem lidos
-    { 
+    {
+      start_prog = true; // habilita o programa a inicializar
       /* 
        * Protocolo de comunicacao definido por mim:
        * Mensagem enviada pelo Arduino:
