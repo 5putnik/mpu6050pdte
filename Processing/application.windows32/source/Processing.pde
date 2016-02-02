@@ -6,13 +6,15 @@ final float version = 1.1;
 // Parametros fixos
 final float dt = 0.02; // Passo entre as medicoes (20 ms)
 
-final float big_P = 50; // Parametro do filtro de Kalman: define a incerteza
+final float big_P = 150; // Parametro do filtro de Kalman: define a incerteza
 final float small_Qt = 0.002; // Parametro do filtro de Kalman: define a velocidade de resposta
 final float small_Qtb = 0.003; // Parametro do filtro de Kalman: define a velocidade de resposta
 final float small_R = 0.01; // Parametro do filtro de Kalman: define a velocidade de resposta
 
 final float reg_ac = 2, // Faixa do acelerometro: +/- 2g
-            reg_gy = 250; // Faixa do giroscopio: +/- 250º/s
+            reg_gy = 250, // Faixa do giroscopio: +/- 250º/s
+            reg_ang = 360, // Faixa do angulo: +/- 360º
+            reg_pos = 0.1; // Faixa do deslocamento: +/- 10 cm
 
 final int maxSize = 1000; // Quantidade maxima de dados a ser salva
 
@@ -135,6 +137,8 @@ float scx, scy, scz; // Escala para plot (2g, 4g, 8g, 16g, 250º/s, 500º/s, 100
 void setup() // Inicializacao do programa
 {
   size(800, 600, P2D); // Gerando uma tela 800x600 com renderizacao 2D melhorada
+  if(Serial.list().length == 0)
+    return;
   myPort = new Serial(this, Serial.list()[0], 9600); // Associando MyPort as portas seriais do computador
   myPort.bufferUntil('\n'); // Busca por \n
   colorMode(RGB, 1);
@@ -205,6 +209,8 @@ void setup() // Inicializacao do programa
 
 void draw() // Rotina em repeticao permanente
 {
+  if(Serial.list().length == 0)
+    text("ERRO: Arduino nao conectado. Conecte o Arduino e reinicie o programa.",200,200);
   if(!start_prog)
     return;
   background(255, 255, 255); // Tela de fundo branca
@@ -268,7 +274,6 @@ void draw() // Rotina em repeticao permanente
   }
 
   c++; // Contando em qual execucao esta
-  
   if(c == vSize) // Se o programa encontra-se no valor maximo de dados que se pode salvar
   {
     c = 0; // Sobrescreve o dado mais antigo
@@ -334,8 +339,12 @@ void draw() // Rotina em repeticao permanente
       f_dadox[c] = accel_z;
       scx = reg_ac;
       break;
-    default:
-    scx = reg_gy;
+    case 3: case 4: case 5:
+      scx = reg_gy;
+      f_dadox[c] = getdata(int(valorx.getValue()));
+      break;
+    case 6: case 7: case 8:
+      scx = reg_ang;
       f_dadox[c] = getdata(int(valorx.getValue()));
   }
   switch(int(valory.getValue())) // Selecao de variavel eixo Y
@@ -352,8 +361,12 @@ void draw() // Rotina em repeticao permanente
       f_dadoy[c] = accel_x;
       scy = reg_ac;
       break;
-    default:
+    case 3: case 4: case 5:
       scy = reg_gy;
+      f_dadoy[c] = getdata(int(valory.getValue()));
+      break;
+    case 6: case 7: case 8:
+      scy = reg_ang;
       f_dadoy[c] = getdata(int(valory.getValue()));
   }
   
@@ -371,8 +384,12 @@ void draw() // Rotina em repeticao permanente
       f_dadoz[c] = accel_x;
       scz = reg_ac;
       break;
-    default:
+    case 3: case 4: case 5:
       scz = reg_gy;
+      f_dadoz[c] = getdata(int(valorz.getValue()));
+      break;
+    case 6: case 7: case 8:
+      scz = reg_ang;
       f_dadoz[c] = getdata(int(valorz.getValue()));
   }
   
@@ -525,6 +542,12 @@ void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na po
   }
 }
 
+void calculation() // Rotina onde sao feitos todos os calculos relativos ao sensor
+{
+  if(!start_prog)
+    return;
+}
+
 void ddl_standard(DropdownList ddl, String s) // Customizacao padrao de toda lista
 {
   String  temp[]  =  split(s,":"); // Separar os dados cada vez que dois-pontos for encontrado
@@ -566,11 +589,11 @@ float getdata(int val)
     case 5:
       return gyro_z;
     case 6:
-      return ang_x*32768/360;
+      return ang_x;
     case 7:
-      return ang_y*32768/360;
+      return ang_y;
     case 8:
-      return ang_z*32768/360;
+      return ang_z;
     default:
       return -1.0;
   }
