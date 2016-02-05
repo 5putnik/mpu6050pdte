@@ -4,25 +4,50 @@ import processing.serial.*;
 final float version = 1.1;
 
 // Parametros fixos
-final float dt = 0.02; // Passo entre as medicoes (20 ms)
+float dt = 0.02; // Passo entre as medicoes (20 ms) (pode variar)
+int acu = 0; // Variavel auxiliar para o calculo variavel do dt
 
-final float big_P = 150; // Parametro do filtro de Kalman: define a incerteza
-final float small_Qt = 0.002; // Parametro do filtro de Kalman: define a velocidade de resposta
+final float big_P = 50; // Parametro do filtro de Kalman: define a incerteza
+final float small_Qt = 0.003; // Parametro do filtro de Kalman: define a velocidade de resposta
 final float small_Qtb = 0.003; // Parametro do filtro de Kalman: define a velocidade de resposta
 final float small_R = 0.01; // Parametro do filtro de Kalman: define a velocidade de resposta
 
 final float reg_ac = 2, // Faixa do acelerometro: +/- 2g
             reg_gy = 250, // Faixa do giroscopio: +/- 250º/s
             reg_ang = 360, // Faixa do angulo: +/- 360º
-            reg_pos = 0.1; // Faixa do deslocamento: +/- 10 cm
+            reg_pos = 100; // Faixa do deslocamento: +/- 10 cm
 
 final int maxSize = 1000; // Quantidade maxima de dados a ser salva
 
 final int XMAX = 800, // Parametro: Tamanho X da tela
           gap = 10, // Parametro: espacamento geral
           sqrwidth = 400; // Parametro: tamanho do grafico
+          
+String out = "../../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hour(),2)+nf(minute(),2)+nf(second(),2)+".csv";
 // Fim dos parametros fixos
 
+class displacement
+{
+  float x,
+        a,
+        g;
+  displacement(float g)
+  {
+    this.x = 0;
+    this.a = 0;
+    this.g = g*grav;
+  }
+  float kalman_step(float read)
+  {
+    float k1 = 0.96;
+    //float k2 = 0.5;
+    this.g = k1*this.g + (1-k1)*read*grav; // High-pass para ler somente a gravidade
+    this.a = read*grav - this.g;
+    //this.a = k2*(read*grav - this.g) + (1-k2)*this.a; // Low-pass para ler somente o sensor
+    this.x += 1000 * this.a * dt * dt * 0.5; // 1000 para resposta em mm
+    return this.x;
+  }
+}
 class Obj_Kalman
 {
   float Qt,
@@ -88,11 +113,16 @@ float dadox[] = new float[maxSize], dadoy[] = new float[maxSize], dadoz[] = new 
 float f_dadox[] = new float[maxSize], f_dadoy[] = new float[maxSize], f_dadoz[] = new float[maxSize]; // Dados a serem filtrados
 int c = 0; // Contador
 
-Obj_Kalman k_x, k_y, k_z; // Variaveis que serao submetidas ao filtro Kalman
+Obj_Kalman k_x, k_y, k_z; // Variaveis que serao submetidas ao filtro Kalman (rotacao)
+
+displacement d_x, d_y, d_z; // Variaveis que serao submetidas ao filtro Kalman (translacao)
 
 float ang_x = 0, // Valor Angulo X em graus
       ang_y = 0, // Valor Angulo Y em graus
-      ang_z = 0; // Valor Angulo Z em graus
+      ang_z = 0, // Valor Angulo Z em graus
+      dis_x = 0, // Distancia no eixo X (desvio)
+      dis_y = 0, // Distancia no eixo Y (abertura)
+      dis_z = 0; // Distancia no eixo Z (protracao)
 
 float grav_x, grav_y, grav_z; // Componentes da gravidade
 
@@ -136,6 +166,8 @@ float scx, scy, scz; // Escala para plot (2g, 4g, 8g, 16g, 250º/s, 500º/s, 100
 
 void setup() // Inicializacao do programa
 {
+  if(getFolder().equals("Processing"))
+    out = "../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hour(),2)+nf(minute(),2)+nf(second(),2)+".csv";
   size(800, 600, P2D); // Gerando uma tela 800x600 com renderizacao 2D melhorada
   if(Serial.list().length == 0)
     return;
@@ -163,9 +195,9 @@ void setup() // Inicializacao do programa
   ddl_standard(sample, "400 (padrao):50:100:200:250:500:750:1000"); // Cria a lista filter
   ddl_standard(ac_unit, "m/s^2:g"); // Cria a lista ac_unit
   ddl_standard(gy_unit, "grau/s:rad/s"); // Cria a lista gy_unit
-  ddl_standard(valorx, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valorx
-  ddl_standard(valory, "Acel Y:Acel X:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valory
-  ddl_standard(valorz, "Acel Z:Acel Y:Acel X:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valorz
+  ddl_standard(valorx, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desvio:Abertura:Protracao"); // Cria a lista valorx
+  ddl_standard(valory, "Acel Y:Acel Z:Acel X:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desvio:Abertura:Protracao"); // Cria a lista valory
+  ddl_standard(valorz, "Acel Z:Acel Y:Acel X:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desvio:Abertura:Protracao"); // Cria a lista valorz
   ddl_standard(savemode, "Salvar uma vez:Sobrepor arquivo:Salvar continuamente"); // Cria a lista savemode
   
   cb_save = cb_standard("Salvar arquivo?", 10, 300); // Cria o CheckBox cb_save
@@ -202,9 +234,12 @@ void setup() // Inicializacao do programa
         big_P, // P11
         0, // bias
         0); // ang
+    d_x = new displacement(0);
+    d_y = new displacement(1);
+    d_z = new displacement(0);
   String tbl[] = new String[1]; // Inicializando arquivo de output ao inicializar o programa
-  tbl[0] = "blablabla"; // Preenchendo a primeira linha com qualquer coisa para sobrescrever qualquer arquivo que possa existir
-  saveStrings("output.csv", tbl); // Salvando arquivo sob o nome de output.csv
+  tbl[0] = "x"; // Preenchendo a primeira linha com qualquer coisa para sobrescrever qualquer arquivo que possa existir
+  saveStrings(out, tbl); // Salvando arquivo sob o nome de output_[data]_[hora].csv
 }
 
 void draw() // Rotina em repeticao permanente
@@ -229,21 +264,30 @@ void draw() // Rotina em repeticao permanente
   ang_y = k_y.kalman_step(gyro_y, ang_y); // Filtro de Kalman para selecionar o angulo
   ang_z = k_z.kalman_step(gyro_z, ang_z); // Filtro de Kalman para selecionar o angulo
   
+  dis_x = d_x.kalman_step(accel_x);
+  dis_y = d_y.kalman_step(accel_y);
+  dis_z = d_z.kalman_step(accel_z);
+  //println("x: " + nf(dt*dt*500*d_x.a, 1, 1) + "mm | y: " + nf(dt*dt*500*d_y.a,1 , 1) + "mm | z: " + nf(dt*dt*500*d_z.a, 1, 1) + "mm");
+  
   grav_x = rot(gx, gy, gz, ang_x*PI/180, ang_y*PI/180, ang_z*PI/180, 0); // Rotacionando o vetor (gx,gy,gz) com as leituras do giroscopio
   grav_y = rot(gx, gy, gz, ang_x*PI/180, ang_y*PI/180, ang_z*PI/180, 1); // Rotacionando o vetor (gx,gy,gz) com as leituras do giroscopio
   grav_z = rot(gx, gy, gz, ang_x*PI/180, ang_y*PI/180, ang_z*PI/180, 2); // Rotacionando o vetor (gx,gy,gz) com as leituras do giroscopio
   
-  text("Drifting x: " + nf(k_x.bias, 1, 0) + "º/s (" + nf(grav_x, 1, 0) + " g)", 10, 420); // Imprimindo o valor da gravidade na tela
-  text("Drifting y: " + nf(k_y.bias, 1, 0) + "º/s (" + nf(grav_y, 1, 0) + " g)", 10, 440); // Imprimindo o valor da gravidade na tela
-  text("Drifting z: " + nf(k_z.bias, 1, 0) + "º/s (" + nf(grav_z, 1, 0) + " g)", 10, 460); // Imprimindo o valor da gravidade na tela
+  text("Desvio: " + int(dis_x) + " mm", 10, 360);
+  text("Abertura: " + int(dis_y) + " mm", 10, 380);
+  text("Protracao: " + int(dis_z) + " mm", 10, 400);
   
-  text("Gravidade x: " + nf(grav_x * grav, 1, 0) + "m/s² (" + nf(grav_x, 1, 0) + " g)", 10, 480); // Imprimindo o valor da gravidade na tela
-  text("Gravidade y: " + nf(grav_y * grav, 1, 0) + "m/s² (" + nf(grav_y, 1, 0) + " g)", 10, 500); // Imprimindo o valor da gravidade na tela
-  text("Gravidade z: " + nf(grav_z * grav, 1, 0) + "m/s² (" + nf(grav_z, 1, 0) + " g)", 10, 520); // Imprimindo o valor da gravidade na tela
+  text("Drifting x: " + nf(k_x.bias, 1, 2) + "º/s (" + nf(grav_x, 1, 2) + " g)", 10, 420); // Imprimindo o valor da gravidade na tela
+  text("Drifting y: " + nf(k_y.bias, 1, 2) + "º/s (" + nf(grav_y, 1, 2) + " g)", 10, 440); // Imprimindo o valor da gravidade na tela
+  text("Drifting z: " + nf(k_z.bias, 1, 2) + "º/s (" + nf(grav_z, 1, 2) + " g)", 10, 460); // Imprimindo o valor da gravidade na tela
   
-  text("Angulo x: " + nf(ang_x, 1, 0) + "º", 10, 540); // Imprimindo o valor do angulo na tela
-  text("Angulo y: " + nf(ang_y, 1, 0) + "º", 10, 560); // Imprimindo o valor do angulo na tela
-  text("Angulo z: " + nf(ang_z, 1, 0) + "º", 10, 580); // Imprimindo o valor do angulo na tela
+  text("Gravidade x: " + nf(grav_x * grav, 1, 2) + "m/s² (" + nf(grav_x, 1, 2) + " g)", 10, 480); // Imprimindo o valor da gravidade na tela
+  text("Gravidade y: " + nf(grav_y * grav, 1, 2) + "m/s² (" + nf(grav_y, 1, 2) + " g)", 10, 500); // Imprimindo o valor da gravidade na tela
+  text("Gravidade z: " + nf(grav_z * grav, 1, 2) + "m/s² (" + nf(grav_z, 1, 2) + " g)", 10, 520); // Imprimindo o valor da gravidade na tela
+  
+  text("Angulo x (pitch): " + nf(ang_x, 1, 2) + "º", 10, 540); // Imprimindo o valor do angulo na tela
+  text("Angulo y (yaw)  :" + nf(ang_y, 1, 2) + "º", 10, 560); // Imprimindo o valor do angulo na tela
+  text("Angulo z (roll) : " + nf(ang_z, 1, 2) + "º", 10, 580); // Imprimindo o valor do angulo na tela
   
   switch(int(sample.getValue())) // Selecao de quantidade de dados gravados por ciclo
   {
@@ -285,14 +329,14 @@ void draw() // Rotina em repeticao permanente
         case 0:
           cb_save.toggle(0);
         case 1:
-          writecsv(0, f_dadox, f_dadoy, f_dadoz, "output.csv");
+          writecsv(0, f_dadox, f_dadoy, f_dadoz, out);
           break;
           case 2:
-          String doc[] = loadStrings("output.csv");
+          String doc[] = loadStrings(out);
           if(doc.length == 1)
-            writecsv(0, f_dadox, f_dadoy, f_dadoz, "output.csv");
+            writecsv(0, f_dadox, f_dadoy, f_dadoz, out);
           else
-            writecsv(1, f_dadox, f_dadoy, f_dadoz, "output.csv");
+            writecsv(1, f_dadox, f_dadoy, f_dadoz, out);
           
       }
     }
@@ -346,6 +390,10 @@ void draw() // Rotina em repeticao permanente
     case 6: case 7: case 8:
       scx = reg_ang;
       f_dadox[c] = getdata(int(valorx.getValue()));
+      break;
+    case 9: case 10: case 11:
+      scx = reg_pos;
+      f_dadox[c] = getdata(int(valorx.getValue()));
   }
   switch(int(valory.getValue())) // Selecao de variavel eixo Y
   {
@@ -367,6 +415,10 @@ void draw() // Rotina em repeticao permanente
       break;
     case 6: case 7: case 8:
       scy = reg_ang;
+      f_dadoy[c] = getdata(int(valory.getValue()));
+      break;
+    case 9: case 10: case 11:
+      scy = reg_pos;
       f_dadoy[c] = getdata(int(valory.getValue()));
   }
   
@@ -391,6 +443,10 @@ void draw() // Rotina em repeticao permanente
     case 6: case 7: case 8:
       scz = reg_ang;
       f_dadoz[c] = getdata(int(valorz.getValue()));
+      break;
+    case 9: case 10: case 11:
+      scz = reg_pos;
+      f_dadoz[c] = getdata(int(valorz.getValue()));    
   }
   
   if(c > 0) switch(int(filter.getValue())) // Selecao do filtro (somente a partir da segunda leitura)
@@ -511,10 +567,8 @@ void draw() // Rotina em repeticao permanente
     text("Leitura giroscopio Z: " + gyz, 10, 140); // Imprime valor lido
     text("Temperatura: " + tmp + "ºC", 10, 180); // Imprime valor lido
   }
-  
-
 }
-
+ 
 void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na porta serial
 {
   String xString = myPort.readStringUntil('\n'); // Ler o que foi escrito ate a quebra de linha
@@ -523,6 +577,10 @@ void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na po
     String  temp[]  =  split(xString,":"); // Separar os dados cada vez que dois-pontos for encontrado
     if(xString.charAt(0)  ==  '#'  &&  temp.length==8) // Se o primeiro caractere escrito for cerquilha e 8 elementos forem lidos
     {
+      dt = (millis() - acu)/1000.0;
+      if(!start_prog)
+        dt = 0;
+      acu = millis();
       start_prog = true; // habilita o programa a inicializar
       /* 
        * Protocolo de comunicacao definido por mim:
@@ -542,11 +600,10 @@ void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na po
   }
 }
 
-void calculation() // Rotina onde sao feitos todos os calculos relativos ao sensor
+void stop() // Finalizando o programa
 {
-  if(!start_prog)
-    return;
-}
+  
+} 
 
 void ddl_standard(DropdownList ddl, String s) // Customizacao padrao de toda lista
 {
@@ -594,6 +651,12 @@ float getdata(int val)
       return ang_y;
     case 8:
       return ang_z;
+    case 9:
+      return dis_x;
+    case 10:
+      return dis_y;
+    case 11:
+      return dis_z;
     default:
       return -1.0;
   }
@@ -649,4 +712,11 @@ void writecsv(int rFlag, float data1[], float data2[], float data3[], String fna
   String lines[] = loadStrings(fname);
   lines[0] = "sep=,";
   saveStrings(fname, lines);
+}
+
+String getFolder()
+{
+  String full = sketchPath("");
+  String  temp[]  =  split(full,"\\");
+  return temp[temp.length-2];
 }
