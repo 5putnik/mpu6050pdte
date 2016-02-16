@@ -49,21 +49,24 @@ class displacement
 {
   float x,
         a,
-        g;
+        g,
+        v;
   displacement(float g)
   {
     this.x = 0;
     this.a = 0;
     this.g = g*grav;
+    this.v = 0;
   }
   public float kalman_step(float read)
   {
-    float k1 = 0.96f;
-    //float k2 = 0.5;
+    float k1 = 0.1f;
+    float k2 = 0.9f;
     this.g = k1*this.g + (1-k1)*read*grav; // High-pass para ler somente a gravidade
-    this.a = read*grav - this.g;
-    //this.a = k2*(read*grav - this.g) + (1-k2)*this.a; // Low-pass para ler somente o sensor
-    this.x += 1000 * this.a * dt * dt * 0.5f; // 1000 para resposta em mm
+    //this.a = read*grav - this.g;
+    this.a = k2*(read*grav - this.g) + (1-k2)*this.a; // Low-pass para ler somente o sensor
+    this.v += this.a * dt;
+    this.x += 1000 * (this.v * dt + this.a * dt * dt * 0.5f); // 1000 para resposta em mm
     return this.x;
   }
 }
@@ -157,9 +160,11 @@ float gx = 0, // Leitura inicial da gravidade
 PFont f; // Fonte do texto
 
 ControlP5 cp5; // Controle para utilizar objetos
-CheckBox cb_save; // CheckBox para salvar arquivos
+CheckBox cb_save, // CheckBox para salvar arquivos
+         cb_hide; // CheckBox que esconde informacoes
 DropdownList axismode, // lista para escolher o modo eixo (XY ou YT)
              fillmode, // lista para escolher o modo preenchimento (linha ou ponto)
+             qtd, // lista de quantidade de valores a serem plotados (apenas para YT)
              valorx, // lista de valores a serem plotados (Eixo X ou valor 1)
              valory, // lista de valores a serem plotados (Eixo Y ou valor 2)
              valorz, // lista de valores a serem plotados (valor 3, apenas para YT)
@@ -206,6 +211,7 @@ public void setup() // Inicializacao do programa
   scale = cp5.addDropdownList("1x", XMAX/2 + 150, 2*gap + sqrwidth, 100, 84); // Insercao da lista scale
   sample = cp5.addDropdownList("400 (padrao)", XMAX/2 + 255, 2*gap + sqrwidth, 100, 84); // Insercao da lista sample
   savemode = cp5.addDropdownList("Salvar uma vez", 120, 300, 100, 84); // Insercao da lista savemode
+  qtd = cp5.addDropdownList("3", 340, 270, 30, 84); // Insercao da lista qtd
   
   ddl_standard(axismode, "Modo YT:Modo XY"); // Cria a lista axismode
   ddl_standard(fillmode, "Pontos:Linhas"); // Cria a lista fillmode
@@ -218,8 +224,10 @@ public void setup() // Inicializacao do programa
   ddl_standard(valory, "Acel Y:Acel Z:Acel X:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desvio:Abertura:Protracao"); // Cria a lista valory
   ddl_standard(valorz, "Acel Z:Acel Y:Acel X:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desvio:Abertura:Protracao"); // Cria a lista valorz
   ddl_standard(savemode, "Salvar uma vez:Sobrepor arquivo:Salvar continuamente"); // Cria a lista savemode
+  ddl_standard(qtd, "3:2:1"); // Cria a lista qtd
   
   cb_save = cb_standard("Salvar arquivo?", 10, 300); // Cria o CheckBox cb_save
+  cb_hide = cb_standard("Esconder textos desnecessarios", 10, 325); // Cria o CheckBox cb_hide
   
   valorx.setBackgroundColor(color(255, 0, 0)); // Cor de fundo da lista
   valory.setBackgroundColor(color(0, 255, 0)); // Cor de fundo da lista
@@ -264,7 +272,10 @@ public void setup() // Inicializacao do programa
 public void draw() // Rotina em repeticao permanente
 {
   if(Serial.list().length == 0)
+  {
+    background(0); // Tela de fundo preta
     text("ERRO: Arduino nao conectado. Conecte o Arduino e reinicie o programa.",200,200);
+  }
   if(!start_prog)
     return;
   background(255, 255, 255); // Tela de fundo branca
@@ -292,21 +303,24 @@ public void draw() // Rotina em repeticao permanente
   grav_y = rot(gx, gy, gz, ang_x*PI/180, ang_y*PI/180, ang_z*PI/180, 1); // Rotacionando o vetor (gx,gy,gz) com as leituras do giroscopio
   grav_z = rot(gx, gy, gz, ang_x*PI/180, ang_y*PI/180, ang_z*PI/180, 2); // Rotacionando o vetor (gx,gy,gz) com as leituras do giroscopio
   
-  text("Desvio: " + PApplet.parseInt(dis_x) + " mm", 10, 360);
-  text("Abertura: " + PApplet.parseInt(dis_y) + " mm", 10, 380);
-  text("Protracao: " + PApplet.parseInt(dis_z) + " mm", 10, 400);
-  
-  text("Drifting x: " + nf(k_x.bias, 1, 2) + "\u00ba/s (" + nf(grav_x, 1, 2) + " g)", 10, 420); // Imprimindo o valor da gravidade na tela
-  text("Drifting y: " + nf(k_y.bias, 1, 2) + "\u00ba/s (" + nf(grav_y, 1, 2) + " g)", 10, 440); // Imprimindo o valor da gravidade na tela
-  text("Drifting z: " + nf(k_z.bias, 1, 2) + "\u00ba/s (" + nf(grav_z, 1, 2) + " g)", 10, 460); // Imprimindo o valor da gravidade na tela
-  
-  text("Gravidade x: " + nf(grav_x * grav, 1, 2) + "m/s\u00b2 (" + nf(grav_x, 1, 2) + " g)", 10, 480); // Imprimindo o valor da gravidade na tela
-  text("Gravidade y: " + nf(grav_y * grav, 1, 2) + "m/s\u00b2 (" + nf(grav_y, 1, 2) + " g)", 10, 500); // Imprimindo o valor da gravidade na tela
-  text("Gravidade z: " + nf(grav_z * grav, 1, 2) + "m/s\u00b2 (" + nf(grav_z, 1, 2) + " g)", 10, 520); // Imprimindo o valor da gravidade na tela
-  
-  text("Angulo x (pitch): " + nf(ang_x, 1, 2) + "\u00ba", 10, 540); // Imprimindo o valor do angulo na tela
-  text("Angulo y (yaw)  :" + nf(ang_y, 1, 2) + "\u00ba", 10, 560); // Imprimindo o valor do angulo na tela
-  text("Angulo z (roll) : " + nf(ang_z, 1, 2) + "\u00ba", 10, 580); // Imprimindo o valor do angulo na tela
+  if((int)cb_hide.getArrayValue()[0] == 0)
+  {
+    text("Desvio: " + PApplet.parseInt(dis_x) + " mm", 10, 360);
+    text("Abertura: " + PApplet.parseInt(dis_y) + " mm", 10, 380);
+    text("Protracao: " + PApplet.parseInt(dis_z) + " mm", 10, 400);
+    
+    text("Drifting x: " + nf(k_x.bias, 1, 2) + "\u00ba/s (" + nf(grav_x, 1, 2) + " g)", 10, 420); // Imprimindo o valor da gravidade na tela
+    text("Drifting y: " + nf(k_y.bias, 1, 2) + "\u00ba/s (" + nf(grav_y, 1, 2) + " g)", 10, 440); // Imprimindo o valor da gravidade na tela
+    text("Drifting z: " + nf(k_z.bias, 1, 2) + "\u00ba/s (" + nf(grav_z, 1, 2) + " g)", 10, 460); // Imprimindo o valor da gravidade na tela
+    
+    text("Gravidade x: " + nf(grav_x * grav, 1, 2) + "m/s\u00b2 (" + nf(grav_x, 1, 2) + " g)", 10, 480); // Imprimindo o valor da gravidade na tela
+    text("Gravidade y: " + nf(grav_y * grav, 1, 2) + "m/s\u00b2 (" + nf(grav_y, 1, 2) + " g)", 10, 500); // Imprimindo o valor da gravidade na tela
+    text("Gravidade z: " + nf(grav_z * grav, 1, 2) + "m/s\u00b2 (" + nf(grav_z, 1, 2) + " g)", 10, 520); // Imprimindo o valor da gravidade na tela
+    
+    text("Angulo x (pitch): " + nf(ang_x, 1, 2) + "\u00ba", 10, 540); // Imprimindo o valor do angulo na tela
+    text("Angulo y (yaw)  :" + nf(ang_y, 1, 2) + "\u00ba", 10, 560); // Imprimindo o valor do angulo na tela
+    text("Angulo z (roll) : " + nf(ang_z, 1, 2) + "\u00ba", 10, 580); // Imprimindo o valor do angulo na tela
+  }
   
   switch(PApplet.parseInt(sample.getValue())) // Selecao de quantidade de dados gravados por ciclo
   {
@@ -504,7 +518,16 @@ public void draw() // Rotina em repeticao permanente
   }
   else
   {
-    valorz.show();
+    valorz.hide();
+    valory.hide();
+    switch(PApplet.parseInt(qtd.getValue()))
+    {
+      case 0:
+        valorz.show();
+      case 1:
+        valory.show();
+    }
+    
     dadox[c] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadox[c] * sqrwidth/2) / scx; // Dados de plot 1
     dadoz[c] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadoz[c] * sqrwidth/2) / scz; // Dados de plot 3
     for(i=1;i<vSize;i++)
@@ -515,20 +538,30 @@ public void draw() // Rotina em repeticao permanente
           line(XMAX - (gap + sqrwidth) + sqrwidth*(i-1)/vSize, dadox[i-1], XMAX - (gap + sqrwidth) + sqrwidth*i/vSize, dadox[i]); // Desenha linhas
         else
           rect(XMAX - (gap + sqrwidth) + sqrwidth*i/vSize - 1, dadox[i] - 1, XMAX - (gap + sqrwidth) + sqrwidth*i/vSize + 1, dadox[i] + 1); // Desenha um "ponto" de tamanho 3x3 pixels
+      
+      switch(PApplet.parseInt(qtd.getValue()))
+    {
+      case 0: // Desenha dado 3
+        stroke(0, 0, 255); // Habilita linhas de contorno azuis
+        if(dadoz[i] != 0 && dadoz[i-1] != 0) // Se eles forem validos
+          if(mode_line != 0)
+            line(XMAX - (gap + sqrwidth) + sqrwidth*(i-1)/vSize, dadoz[i-1], XMAX - (gap + sqrwidth) + sqrwidth*i/vSize, dadoz[i]); // Desenha linhas
+          else
+            rect(XMAX - (gap + sqrwidth) + sqrwidth*i/vSize - 1, dadoz[i] - 1, XMAX - (gap + sqrwidth) + sqrwidth*i/vSize + 1, dadoz[i] + 1); // Desenha um "ponto" de tamanho 3x3 pixels  
+          
+      case 1: // Desenha dado 2
+        stroke(0, 255, 0); // Habilita linhas de contorno verdes
+        if(dadoy[i] != 0 && dadoy[i-1] != 0) // Se eles forem validos
+          if(mode_line != 0)
+            line(XMAX - (gap + sqrwidth) + sqrwidth*(i-1)/vSize, dadoy[i-1], XMAX - (gap + sqrwidth) + sqrwidth*i/vSize, dadoy[i]); // Desenha linhas
+          else
+            rect(XMAX - (gap + sqrwidth) + sqrwidth*i/vSize - 1, dadoy[i] - 1, XMAX - (gap + sqrwidth) + sqrwidth*i/vSize + 1, dadoy[i] + 1); // Desenha um "ponto" de tamanho 3x3 pixels
+    }
+      
 
-      stroke(0, 255, 0); // Habilita linhas de contorno verdes
-      if(dadoy[i] != 0 && dadoy[i-1] != 0) // Se eles forem validos
-        if(mode_line != 0)
-          line(XMAX - (gap + sqrwidth) + sqrwidth*(i-1)/vSize, dadoy[i-1], XMAX - (gap + sqrwidth) + sqrwidth*i/vSize, dadoy[i]); // Desenha linhas
-        else
-          rect(XMAX - (gap + sqrwidth) + sqrwidth*i/vSize - 1, dadoy[i] - 1, XMAX - (gap + sqrwidth) + sqrwidth*i/vSize + 1, dadoy[i] + 1); // Desenha um "ponto" de tamanho 3x3 pixels
+      
 
-      stroke(0, 0, 255); // Habilita linhas de contorno azuis
-      if(dadoz[i] != 0 && dadoz[i-1] != 0) // Se eles forem validos
-        if(mode_line != 0)
-          line(XMAX - (gap + sqrwidth) + sqrwidth*(i-1)/vSize, dadoz[i-1], XMAX - (gap + sqrwidth) + sqrwidth*i/vSize, dadoz[i]); // Desenha linhas
-        else
-          rect(XMAX - (gap + sqrwidth) + sqrwidth*i/vSize - 1, dadoz[i] - 1, XMAX - (gap + sqrwidth) + sqrwidth*i/vSize + 1, dadoz[i] + 1); // Desenha um "ponto" de tamanho 3x3 pixels
+      
     }
      stroke(0); // Habilita linhas de contorno pretas
   }
@@ -564,27 +597,39 @@ public void draw() // Rotina em repeticao permanente
   text("Valores a serem representados no grafico:", 10, 260); // Texto informativo
   text("Propriedades de visualizacao:", 10, 210); // Texto informativo
   text("Filtro:", XMAX/2, 3*gap + sqrwidth); // Texto informativo 
-  text("Unidade:", 270, 16); // Texto informativo
-  text("Unidade:", 270, 96); // Texto informativo
-  if(accel_x == -1.0f && accel_y == -1.0f && accel_z == -1.0f && gyro_x == -1.0f && gyro_y == -1.0f && gyro_z == -1.0f && tmp == 36.53f) // Se todos forem iguais ao valor que geralmente representa erro no protocolo I2C de comunicacao
+  
+
+  if((int)cb_hide.getArrayValue()[0] == 0)
   {
-    text("Leitura acelerometro X: Erro na comunicacao!", 10, 20); // Imprime mensagem de erro
-    text("Leitura acelerometro Y: Erro na comunicacao!", 10, 40); // Imprime mensagem de erro
-    text("Leitura acelerometro Z: Erro na comunicacao!", 10, 60); // Imprime mensagem de erro
-    text("Leitura giroscopio X: Erro na comunicacao!", 10, 100); // Imprime mensagem de erro
-    text("Leitura giroscopio Y: Erro na comunicacao!", 10, 120); // Imprime mensagem de erro
-    text("Leitura giroscopio Z: Erro na comunicacao!", 10, 140); // Imprime mensagem de erro
-    text("Temperatura: Erro na comunicacao!", 10, 180); // Imprime mensagem de erro
+    ac_unit.show();
+    gy_unit.show();
+    text("Unidade:", 270, 16); // Texto informativo
+    text("Unidade:", 270, 96); // Texto informativo
+    if(accel_x == -1.0f && accel_y == -1.0f && accel_z == -1.0f && gyro_x == -1.0f && gyro_y == -1.0f && gyro_z == -1.0f && tmp == 36.53f) // Se todos forem iguais ao valor que geralmente representa erro no protocolo I2C de comunicacao
+    {
+      text("Leitura acelerometro X: Erro na comunicacao!", 10, 20); // Imprime mensagem de erro
+      text("Leitura acelerometro Y: Erro na comunicacao!", 10, 40); // Imprime mensagem de erro
+      text("Leitura acelerometro Z: Erro na comunicacao!", 10, 60); // Imprime mensagem de erro
+      text("Leitura giroscopio X: Erro na comunicacao!", 10, 100); // Imprime mensagem de erro
+      text("Leitura giroscopio Y: Erro na comunicacao!", 10, 120); // Imprime mensagem de erro
+      text("Leitura giroscopio Z: Erro na comunicacao!", 10, 140); // Imprime mensagem de erro
+      text("Temperatura: Erro na comunicacao!", 10, 180); // Imprime mensagem de erro
+    }
+    else
+    {
+      text("Leitura acelerometro X: " + acx, 10, 20); // Imprime valor lido
+      text("Leitura acelerometro Y: " + acy, 10, 40); // Imprime valor lido
+      text("Leitura acelerometro Z: " + acz, 10, 60); // Imprime valor lido
+      text("Leitura giroscopio X: " + gyx, 10, 100); // Imprime valor lido
+      text("Leitura giroscopio Y: " + gyy, 10, 120); // Imprime valor lido
+      text("Leitura giroscopio Z: " + gyz, 10, 140); // Imprime valor lido
+      text("Temperatura: " + tmp + "\u00baC", 10, 180); // Imprime valor lido
+    }
   }
   else
   {
-    text("Leitura acelerometro X: " + acx, 10, 20); // Imprime valor lido
-    text("Leitura acelerometro Y: " + acy, 10, 40); // Imprime valor lido
-    text("Leitura acelerometro Z: " + acz, 10, 60); // Imprime valor lido
-    text("Leitura giroscopio X: " + gyx, 10, 100); // Imprime valor lido
-    text("Leitura giroscopio Y: " + gyy, 10, 120); // Imprime valor lido
-    text("Leitura giroscopio Z: " + gyz, 10, 140); // Imprime valor lido
-    text("Temperatura: " + tmp + "\u00baC", 10, 180); // Imprime valor lido
+    ac_unit.hide();
+    gy_unit.hide();
   }
 }
  
