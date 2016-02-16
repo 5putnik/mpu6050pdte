@@ -20,7 +20,7 @@ public class Processing extends PApplet {
 
 
 
-final float version = 1.1f;
+final float version = 1.2f;
 
 // Parametros fixos
 float dt = 0.02f; // Passo entre as medicoes (20 ms) (pode variar)
@@ -48,25 +48,24 @@ String out = "../../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hou
 class displacement
 {
   float x,
-        a,
-        g,
-        v;
-  displacement(float g)
+        //v,
+        //a,
+        ang,
+        r;
+  displacement()
   {
     this.x = 0;
-    this.a = 0;
-    this.g = g*grav;
-    this.v = 0;
+    //this.v = 0;
+    //this.a = 0;
   }
-  public float kalman_step(float read)
+  public float step(float read)
   {
-    float k1 = 0.1f;
-    float k2 = 0.9f;
-    this.g = k1*this.g + (1-k1)*read*grav; // High-pass para ler somente a gravidade
-    //this.a = read*grav - this.g;
-    this.a = k2*(read*grav - this.g) + (1-k2)*this.a; // Low-pass para ler somente o sensor
-    this.v += this.a * dt;
-    this.x += 1000 * (this.v * dt + this.a * dt * dt * 0.5f); // 1000 para resposta em mm
+    float r = sqrt(d1*d1 + d2*d2 - 2*d1*d2*cos(((360 - d3)*PI/180))); // Lei dos cossenos. "360 - d3" pois o angulo indicado representa o suplementar. "*PI/180" para converter de graus para radianos
+    //float v0 = this.v;
+    //float x0 = this.x;
+    this.x = -(read * PI / 180) * r; // Convertendo o valor de graus para radianos. Valor negativo pois a mandibula abre para baixo
+    //this.v = (x - x0)/dt;
+    //this.a = (v - v0)/dt;
     return this.x;
   }
 }
@@ -126,7 +125,7 @@ boolean start_prog = false;
 float accel_x, accel_y, accel_z, tmp,gyro_x, gyro_y, gyro_z = 0; // Valores medidos pelo sensor
 String acx, acy, acz, gyx, gyy, gyz; // Valores convertidos para mostrar na tela 
 
-
+float d1, d2, d3; // Valores escritos pelo usuario na tela (medidas da mandibula)
 
 Serial myPort; // Porta serial do Arduino a ser lida
 int vSize = 400; // Quantidade de dados a ser salva
@@ -142,8 +141,8 @@ displacement d_x, d_y, d_z; // Variaveis que serao submetidas ao filtro Kalman (
 float ang_x = 0, // Valor Angulo X em graus
       ang_y = 0, // Valor Angulo Y em graus
       ang_z = 0, // Valor Angulo Z em graus
-      dis_x = 0, // Distancia no eixo X (desvio)
-      dis_y = 0, // Distancia no eixo Y (abertura)
+      dis_x = 0, // Distancia no eixo X (abertura)
+      dis_y = 0, // Distancia no eixo Y (desvio)
       dis_z = 0; // Distancia no eixo Z (protracao)
 
 float grav_x, grav_y, grav_z; // Componentes da gravidade
@@ -162,6 +161,7 @@ PFont f; // Fonte do texto
 ControlP5 cp5; // Controle para utilizar objetos
 CheckBox cb_save, // CheckBox para salvar arquivos
          cb_hide; // CheckBox que esconde informacoes
+         
 DropdownList axismode, // lista para escolher o modo eixo (XY ou YT)
              fillmode, // lista para escolher o modo preenchimento (linha ou ponto)
              qtd, // lista de quantidade de valores a serem plotados (apenas para YT)
@@ -200,18 +200,18 @@ public void setup() // Inicializacao do programa
   colorMode(RGB, 1);
   f = createFont("Arial", 16, true); // Escolhendo fonte do texto como Arial 16
   cp5 = new ControlP5(this); // Inicializacao dos controles P5
-  axismode = cp5.addDropdownList("Modo YT", 10, 220, 100, 84); // Insercao da lista axismode
-  fillmode = cp5.addDropdownList("Pontos", 120, 220, 100, 84); // Insercao da lista fillmode
-  valorx = cp5.addDropdownList("Acel X", 10, 270, 100, 84); // Insercao da lista valorx
-  valory = cp5.addDropdownList("Acel Y", 120, 270, 100, 84); // Insercao da lista valory
-  valorz = cp5.addDropdownList("Acel Z", 230, 270, 100, 84); // Insercao da lista valorz
-  ac_unit = cp5.addDropdownList("m/s^2", 270, 20, 100, 84); // Insercao da lista ac_unit
-  gy_unit = cp5.addDropdownList("grau/s", 270, 100, 100, 84); // Insercao da lista gy_unit
+  axismode = cp5.addDropdownList("Modo YT", 10, 80, 100, 84); // Insercao da lista axismode
+  fillmode = cp5.addDropdownList("Pontos", 120, 80, 100, 84); // Insercao da lista fillmode
+  valorx = cp5.addDropdownList("Acel X", 10, 120, 100, 84); // Insercao da lista valorx
+  valory = cp5.addDropdownList("Acel Y", 120, 120, 100, 84); // Insercao da lista valory
+  valorz = cp5.addDropdownList("Acel Z", 230, 120, 100, 84); // Insercao da lista valorz
+  ac_unit = cp5.addDropdownList("m/s^2", 270, 175, 100, 84); // Insercao da lista ac_unit
+  gy_unit = cp5.addDropdownList("grau/s", 270, 255, 100, 84); // Insercao da lista gy_unit
   filter = cp5.addDropdownList("Raw", XMAX/2 + 45, 2*gap + sqrwidth, 100, 84); // Insercao da lista filter
   scale = cp5.addDropdownList("1x", XMAX/2 + 150, 2*gap + sqrwidth, 100, 84); // Insercao da lista scale
   sample = cp5.addDropdownList("400 (padrao)", XMAX/2 + 255, 2*gap + sqrwidth, 100, 84); // Insercao da lista sample
-  savemode = cp5.addDropdownList("Salvar uma vez", 120, 300, 100, 84); // Insercao da lista savemode
-  qtd = cp5.addDropdownList("3", 340, 270, 30, 84); // Insercao da lista qtd
+  savemode = cp5.addDropdownList("Salvar uma vez", 120, 15, 100, 84); // Insercao da lista savemode
+  qtd = cp5.addDropdownList("3", 340, 120, 30, 84); // Insercao da lista qtd
   
   ddl_standard(axismode, "Modo YT:Modo XY"); // Cria a lista axismode
   ddl_standard(fillmode, "Pontos:Linhas"); // Cria a lista fillmode
@@ -220,14 +220,18 @@ public void setup() // Inicializacao do programa
   ddl_standard(sample, "400 (padrao):50:100:200:250:500:750:1000"); // Cria a lista filter
   ddl_standard(ac_unit, "m/s^2:g"); // Cria a lista ac_unit
   ddl_standard(gy_unit, "grau/s:rad/s"); // Cria a lista gy_unit
-  ddl_standard(valorx, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desvio:Abertura:Protracao"); // Cria a lista valorx
-  ddl_standard(valory, "Acel Y:Acel Z:Acel X:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desvio:Abertura:Protracao"); // Cria a lista valory
-  ddl_standard(valorz, "Acel Z:Acel Y:Acel X:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desvio:Abertura:Protracao"); // Cria a lista valorz
+  ddl_standard(valorx, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Abertura:Desvio"); // Cria a lista valorx
+  ddl_standard(valory, "Acel Y:Acel Z:Acel X:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Abertura:Desvio"); // Cria a lista valory
+  ddl_standard(valorz, "Acel Z:Acel Y:Acel X:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Abertura:Desvio"); // Cria a lista valorz
   ddl_standard(savemode, "Salvar uma vez:Sobrepor arquivo:Salvar continuamente"); // Cria a lista savemode
   ddl_standard(qtd, "3:2:1"); // Cria a lista qtd
   
-  cb_save = cb_standard("Salvar arquivo?", 10, 300); // Cria o CheckBox cb_save
-  cb_hide = cb_standard("Esconder textos desnecessarios", 10, 325); // Cria o CheckBox cb_hide
+  cb_save = cb_standard("Salvar arquivo?", 10, 10); // Cria o CheckBox cb_save
+  cb_hide = cb_standard("Esconder textos desnecessarios", 10, 35); // Cria o CheckBox cb_hide
+  
+  txt_standard("txt1", XMAX/2 + 155, 2*gap + sqrwidth + 20);
+  txt_standard("txt2", XMAX/2 + 155, 2*gap + sqrwidth + 45);
+  txt_standard("txt3", XMAX/2 + 155, 2*gap + sqrwidth + 70);
   
   valorx.setBackgroundColor(color(255, 0, 0)); // Cor de fundo da lista
   valory.setBackgroundColor(color(0, 255, 0)); // Cor de fundo da lista
@@ -261,9 +265,9 @@ public void setup() // Inicializacao do programa
         big_P, // P11
         0, // bias
         0); // ang
-    d_x = new displacement(0);
-    d_y = new displacement(1);
-    d_z = new displacement(0);
+    d_x = new displacement();
+    d_y = new displacement();
+    d_z = new displacement();
   String tbl[] = new String[1]; // Inicializando arquivo de output ao inicializar o programa
   tbl[0] = "x"; // Preenchendo a primeira linha com qualquer coisa para sobrescrever qualquer arquivo que possa existir
   saveStrings(out, tbl); // Salvando arquivo sob o nome de output_[data]_[hora].csv
@@ -294,10 +298,9 @@ public void draw() // Rotina em repeticao permanente
   ang_y = k_y.kalman_step(gyro_y, ang_y); // Filtro de Kalman para selecionar o angulo
   ang_z = k_z.kalman_step(gyro_z, ang_z); // Filtro de Kalman para selecionar o angulo
   
-  dis_x = d_x.kalman_step(accel_x);
-  dis_y = d_y.kalman_step(accel_y);
-  dis_z = d_z.kalman_step(accel_z);
-  //println("x: " + nf(dt*dt*500*d_x.a, 1, 1) + "mm | y: " + nf(dt*dt*500*d_y.a,1 , 1) + "mm | z: " + nf(dt*dt*500*d_z.a, 1, 1) + "mm");
+  dis_x = d_x.step(ang_x);
+  dis_y = d_y.step(ang_y);
+  //dis_z = d_z.step(ang_z);
   
   grav_x = rot(gx, gy, gz, ang_x*PI/180, ang_y*PI/180, ang_z*PI/180, 0); // Rotacionando o vetor (gx,gy,gz) com as leituras do giroscopio
   grav_y = rot(gx, gy, gz, ang_x*PI/180, ang_y*PI/180, ang_z*PI/180, 1); // Rotacionando o vetor (gx,gy,gz) com as leituras do giroscopio
@@ -305,9 +308,8 @@ public void draw() // Rotina em repeticao permanente
   
   if((int)cb_hide.getArrayValue()[0] == 0)
   {
-    text("Desvio: " + PApplet.parseInt(dis_x) + " mm", 10, 360);
-    text("Abertura: " + PApplet.parseInt(dis_y) + " mm", 10, 380);
-    text("Protracao: " + PApplet.parseInt(dis_z) + " mm", 10, 400);
+    text("Abertura: " + PApplet.parseInt(dis_x) + " mm", 10, 360);
+    text("Desvio: " + PApplet.parseInt(dis_y) + " mm", 10, 380);
     
     text("Drifting x: " + nf(k_x.bias, 1, 2) + "\u00ba/s (" + nf(grav_x, 1, 2) + " g)", 10, 420); // Imprimindo o valor da gravidade na tela
     text("Drifting y: " + nf(k_y.bias, 1, 2) + "\u00ba/s (" + nf(grav_y, 1, 2) + " g)", 10, 440); // Imprimindo o valor da gravidade na tela
@@ -594,36 +596,41 @@ public void draw() // Rotina em repeticao permanente
   }
 
   fill(0); // Preenche proximos desenhos de preto
-  text("Valores a serem representados no grafico:", 10, 260); // Texto informativo
-  text("Propriedades de visualizacao:", 10, 210); // Texto informativo
-  text("Filtro:", XMAX/2, 3*gap + sqrwidth); // Texto informativo 
-  
+  text("Valores a serem representados no grafico:", 10, 115); // Texto informativo
+  text("Propriedades de visualizacao:", 10, 75); // Texto informativo
+  text("Filtro:", XMAX/2, 3*gap + sqrwidth); // Texto informativo
+  text("Ramo da mandibula:", XMAX/2, 2*gap + sqrwidth + 35); // Texto informativo
+  text("Corpo da mandibula:", XMAX/2, 2*gap + sqrwidth + 60); // Texto informativo
+  text("Angulo da mandibula:", XMAX/2, 2*gap + sqrwidth + 85); // Texto informativo
+  text("mm", XMAX/2 + 260, 2*gap + sqrwidth + 35); // Texto informativo
+  text("mm", XMAX/2 + 260, 2*gap + sqrwidth + 60); // Texto informativo
+  text("\u00ba", XMAX/2 + 260, 2*gap + sqrwidth + 85); // Texto informativo
 
   if((int)cb_hide.getArrayValue()[0] == 0)
   {
     ac_unit.show();
     gy_unit.show();
-    text("Unidade:", 270, 16); // Texto informativo
-    text("Unidade:", 270, 96); // Texto informativo
+    text("Unidade:", 270, 170); // Texto informativo
+    text("Unidade:", 270, 250); // Texto informativo
     if(accel_x == -1.0f && accel_y == -1.0f && accel_z == -1.0f && gyro_x == -1.0f && gyro_y == -1.0f && gyro_z == -1.0f && tmp == 36.53f) // Se todos forem iguais ao valor que geralmente representa erro no protocolo I2C de comunicacao
     {
-      text("Leitura acelerometro X: Erro na comunicacao!", 10, 20); // Imprime mensagem de erro
-      text("Leitura acelerometro Y: Erro na comunicacao!", 10, 40); // Imprime mensagem de erro
-      text("Leitura acelerometro Z: Erro na comunicacao!", 10, 60); // Imprime mensagem de erro
-      text("Leitura giroscopio X: Erro na comunicacao!", 10, 100); // Imprime mensagem de erro
-      text("Leitura giroscopio Y: Erro na comunicacao!", 10, 120); // Imprime mensagem de erro
-      text("Leitura giroscopio Z: Erro na comunicacao!", 10, 140); // Imprime mensagem de erro
-      text("Temperatura: Erro na comunicacao!", 10, 180); // Imprime mensagem de erro
+      text("Leitura acelerometro X: Erro na comunicacao!", 10, 180); // Imprime mensagem de erro
+      text("Leitura acelerometro Y: Erro na comunicacao!", 10, 200); // Imprime mensagem de erro
+      text("Leitura acelerometro Z: Erro na comunicacao!", 10, 220); // Imprime mensagem de erro
+      text("Leitura giroscopio X: Erro na comunicacao!", 10, 260); // Imprime mensagem de erro
+      text("Leitura giroscopio Y: Erro na comunicacao!", 10, 280); // Imprime mensagem de erro
+      text("Leitura giroscopio Z: Erro na comunicacao!", 10, 300); // Imprime mensagem de erro
+      text("Temperatura: Erro na comunicacao!", 10, 340); // Imprime mensagem de erro
     }
     else
     {
-      text("Leitura acelerometro X: " + acx, 10, 20); // Imprime valor lido
-      text("Leitura acelerometro Y: " + acy, 10, 40); // Imprime valor lido
-      text("Leitura acelerometro Z: " + acz, 10, 60); // Imprime valor lido
-      text("Leitura giroscopio X: " + gyx, 10, 100); // Imprime valor lido
-      text("Leitura giroscopio Y: " + gyy, 10, 120); // Imprime valor lido
-      text("Leitura giroscopio Z: " + gyz, 10, 140); // Imprime valor lido
-      text("Temperatura: " + tmp + "\u00baC", 10, 180); // Imprime valor lido
+      text("Leitura acelerometro X: " + acx, 10, 180); // Imprime valor lido
+      text("Leitura acelerometro Y: " + acy, 10, 200); // Imprime valor lido
+      text("Leitura acelerometro Z: " + acz, 10, 220); // Imprime valor lido
+      text("Leitura giroscopio X: " + gyx, 10, 260); // Imprime valor lido
+      text("Leitura giroscopio Y: " + gyy, 10, 280); // Imprime valor lido
+      text("Leitura giroscopio Z: " + gyz, 10, 300); // Imprime valor lido
+      text("Temperatura: " + tmp + "\u00baC", 10, 320); // Imprime valor lido
     }
   }
   else
@@ -633,6 +640,12 @@ public void draw() // Rotina em repeticao permanente
   }
 }
  
+public void keyReleased() // Evento que ocorre toda vez que uma tecla for pressionada
+{
+  d1 = gettext(1);
+  d2 = gettext(2);
+  d3 = gettext(3);
+}
 public void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na porta serial
 {
   String xString = myPort.readStringUntil('\n'); // Ler o que foi escrito ate a quebra de linha
@@ -687,11 +700,25 @@ public CheckBox cb_standard(String title, int xpos, int ypos)
 {
   return cp5.addCheckBox("cb_" + title)
                 .setPosition(xpos, ypos)
-                .setColorForeground(color(120))
+                .setColorForeground(color(0))
+                .setColorBackground(color(0))
                 .setColorActive(color(255, 0, 0))
-                .setColorLabel(color(255))
+                .setColorLabel(color(0))
                 .setSize(20, 20)
                 .addItem(title, 0);
+}
+
+public void txt_standard(String title, int xpos, int ypos)
+{
+  cp5.addTextfield(title)
+     .setPosition(xpos,ypos)
+     .setSize(100, 20)
+     .setColorValue(color(0))
+     .setColorBackground(color(255,255,255))
+     .setFocus(true)
+     .setFont(createFont("arial",15))
+     .setColorForeground(color(0))
+     .setColorActive(color(0));
 }
 
 public float lowpass(float read, float old, float pct)
@@ -703,6 +730,12 @@ public float getdata(int val)
 {
   switch(val) // Selecao de variavel
   {
+    case 0:
+      return accel_x;
+    case 1:
+      return accel_y;
+    case 2:
+      return accel_z;
     case 3:
       return gyro_x;
     case 4:
@@ -783,6 +816,20 @@ public String getFolder()
   String full = sketchPath("");
   String  temp[]  =  split(full,"\\");
   return temp[temp.length-2];
+}
+
+public float gettext(int val)
+{
+  String txtname = "txt"+val;
+  int i;
+  String num = cp5.get(Textfield.class, txtname).getText();
+  if(num.length() == 0)
+    return 0;
+  for(i = 0;i < num.length();i++)
+    if((PApplet.parseInt(num.charAt(i)) < '0' || PApplet.parseInt(num.charAt(i)) > '9') && PApplet.parseInt(num.charAt(i)) != '.')
+      return 0;
+  
+  return PApplet.parseFloat(num);
 }
   public void settings() {  size(800, 600, P2D); }
   static public void main(String[] passedArgs) {
