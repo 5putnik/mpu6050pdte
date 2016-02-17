@@ -183,16 +183,16 @@ void setup() // Inicializacao do programa
   cp5 = new ControlP5(this); // Inicializacao dos controles P5
   axismode = cp5.addDropdownList("Modo YT", 10, 80, 100, 84); // Insercao da lista axismode
   fillmode = cp5.addDropdownList("Pontos", 120, 80, 100, 84); // Insercao da lista fillmode
-  valorx = cp5.addDropdownList("Acel X", 10, 120, 100, 84); // Insercao da lista valorx
-  valory = cp5.addDropdownList("Acel Y", 120, 120, 100, 84); // Insercao da lista valory
-  valorz = cp5.addDropdownList("Acel Z", 230, 120, 100, 84); // Insercao da lista valorz
+  valorx = cp5.addDropdownList("Acel X", 10, 140, 100, 84); // Insercao da lista valorx
+  valory = cp5.addDropdownList("Acel Y", 120, 140, 100, 84); // Insercao da lista valory
+  valorz = cp5.addDropdownList("Acel Z", 230, 140, 100, 84); // Insercao da lista valorz
   ac_unit = cp5.addDropdownList("m/s^2", 270, 175, 100, 84); // Insercao da lista ac_unit
   gy_unit = cp5.addDropdownList("grau/s", 270, 255, 100, 84); // Insercao da lista gy_unit
   filter = cp5.addDropdownList("Raw", XMAX/2 + 45, 2*gap + sqrwidth, 100, 84); // Insercao da lista filter
   scale = cp5.addDropdownList("1x", XMAX/2 + 150, 2*gap + sqrwidth, 100, 84); // Insercao da lista scale
   sample = cp5.addDropdownList("400 (padrao)", XMAX/2 + 255, 2*gap + sqrwidth, 100, 84); // Insercao da lista sample
   savemode = cp5.addDropdownList("Salvar uma vez", 120, 15, 100, 84); // Insercao da lista savemode
-  qtd = cp5.addDropdownList("3", 340, 120, 30, 84); // Insercao da lista qtd
+  qtd = cp5.addDropdownList("3", 340, 140, 30, 84); // Insercao da lista qtd
   
   ddl_standard(axismode, "Modo YT:Modo XY"); // Cria a lista axismode
   ddl_standard(fillmode, "Pontos:Linhas"); // Cria a lista fillmode
@@ -213,6 +213,8 @@ void setup() // Inicializacao do programa
   txt_standard("txt1", XMAX/2 + 155, 2*gap + sqrwidth + 20);
   txt_standard("txt2", XMAX/2 + 155, 2*gap + sqrwidth + 45);
   txt_standard("txt3", XMAX/2 + 155, 2*gap + sqrwidth + 70);
+  
+  bang_standard("Salvar preferencias", XMAX/2 + 155, 2*gap + sqrwidth + 95);
   
   valorx.setBackgroundColor(color(255, 0, 0)); // Cor de fundo da lista
   valory.setBackgroundColor(color(0, 255, 0)); // Cor de fundo da lista
@@ -249,9 +251,6 @@ void setup() // Inicializacao do programa
     d_x = new displacement();
     d_y = new displacement();
     d_z = new displacement();
-  String tbl[] = new String[1]; // Inicializando arquivo de output ao inicializar o programa
-  tbl[0] = "x"; // Preenchendo a primeira linha com qualquer coisa para sobrescrever qualquer arquivo que possa existir
-  saveStrings(out, tbl); // Salvando arquivo sob o nome de output_[data]_[hora].csv
 }
 
 void draw() // Rotina em repeticao permanente
@@ -272,6 +271,8 @@ void draw() // Rotina em repeticao permanente
     g_c++;
     grav = 0.04*grav + 9.81 * 0.96 * sqrt(accel_x*accel_x + accel_y*accel_y + accel_z*accel_z); 
   }
+  
+  if(g_c == 1) loadPreferences(); // Carrega as preferencias
   
   text("v" + nf(version, 1, 0), XMAX-50, 580); 
   
@@ -359,9 +360,9 @@ void draw() // Rotina em repeticao permanente
   }
   
   if((int)cb_save.getArrayValue()[0] == 1) // Se cb_save estiver marcada
-      savemode.show(); // Mostrar savemode se a CheckBox estiver smarcada
+      if(!cb_save.isVisible()) savemode.show(); // Mostrar savemode se a CheckBox estiver marcada
     else
-      savemode.hide(); // Ocultar savemode se a CheckBox estiver desmarcada
+      if(cb_save.isVisible()) savemode.hide(); // Ocultar savemode se a CheckBox estiver desmarcada
   
   if(mode_x != int(valorx.getValue()) || 
      mode_y != int(valory.getValue()) || 
@@ -487,7 +488,7 @@ void draw() // Rotina em repeticao permanente
   if(mode_xy != 0)
   {
     dadox[c] = XMAX - (gap + sqrwidth/2) + (1 + mode_scale)*(f_dadox[c] * sqrwidth/2) / scx; // Dados de plot do eixo x
-    valorz.hide();
+    if(valorz.isVisible()) {valorz.hide();println("!");}
     line(XMAX - (gap + sqrwidth/2), gap, XMAX - (gap + sqrwidth/2), sqrwidth + gap); // Eixo Y do plano cartesiano
     fill(0, 255, 0); // Preenche proximos desenhos de verde
     stroke(0, 255, 0); // Habilita linhas de contorno verdes
@@ -501,16 +502,6 @@ void draw() // Rotina em repeticao permanente
   }
   else
   {
-    valorz.hide();
-    valory.hide();
-    switch(int(qtd.getValue()))
-    {
-      case 0:
-        valorz.show();
-      case 1:
-        valory.show();
-    }
-    
     dadox[c] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadox[c] * sqrwidth/2) / scx; // Dados de plot 1
     dadoz[c] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadoz[c] * sqrwidth/2) / scz; // Dados de plot 3
     for(i=1;i<vSize;i++)
@@ -575,9 +566,8 @@ void draw() // Rotina em repeticao permanente
       gyz = nf(gyro_z * PI/180, 1, 2) + " rad/seg"; // Conversao para valores fisicos (radianos por segundo)
       break;
   }
-
   fill(0); // Preenche proximos desenhos de preto
-  text("Valores a serem representados no grafico:", 10, 115); // Texto informativo
+  text("Valores a serem representados no grafico:", 10, 135); // Texto informativo
   text("Propriedades de visualizacao:", 10, 75); // Texto informativo
   text("Filtro:", XMAX/2, 3*gap + sqrwidth); // Texto informativo
   text("Ramo da mandibula:", XMAX/2, 2*gap + sqrwidth + 35); // Texto informativo
@@ -589,8 +579,8 @@ void draw() // Rotina em repeticao permanente
 
   if((int)cb_hide.getArrayValue()[0] == 0)
   {
-    ac_unit.show();
-    gy_unit.show();
+    if(!ac_unit.isVisible()) ac_unit.show();
+    if(!gy_unit.isVisible()) gy_unit.show();
     text("Unidade:", 270, 170); // Texto informativo
     text("Unidade:", 270, 250); // Texto informativo
     if(accel_x == -1.0 && accel_y == -1.0 && accel_z == -1.0 && gyro_x == -1.0 && gyro_y == -1.0 && gyro_z == -1.0 && tmp == 36.53) // Se todos forem iguais ao valor que geralmente representa erro no protocolo I2C de comunicacao
@@ -616,8 +606,8 @@ void draw() // Rotina em repeticao permanente
   }
   else
   {
-    ac_unit.hide();
-    gy_unit.hide();
+    if(ac_unit.isVisible()) ac_unit.hide();
+    if(gy_unit.isVisible()) gy_unit.hide();
   }
 }
  
@@ -626,6 +616,109 @@ void keyReleased() // Evento que ocorre toda vez que uma tecla for pressionada
   d1 = gettext(1);
   d2 = gettext(2);
   d3 = gettext(3);
+}
+
+public void controlEvent(ControlEvent ev)
+{
+  if(ev.isFrom(cb_save))
+  {
+    out = "../../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hour(),2)+nf(minute(),2)+nf(second(),2)+".csv";
+    if(getFolder().equals("Processing"))
+      out = "../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hour(),2)+nf(minute(),2)+nf(second(),2)+".csv";
+    String tbl[] = new String[1]; // Inicializando arquivo de output ao inicializar o programa
+    tbl[0] = "x"; // Preenchendo a primeira linha com qualquer coisa para sobrescrever qualquer arquivo que possa existir
+    saveStrings(out, tbl); // Salvando arquivo sob o nome de output_[data]_[hora].csv
+  }
+  if((ev.isFrom(cb_save)) || (ev.isFrom(cb_hide)))
+    return;
+  if(ev.getController().getName().equals("Salvar preferencias"))
+    savePreferences();
+}
+
+void loadPreferences()
+{
+  String fname = "data.xyz";
+  if(!(getFolder().equals("Processing")))
+  {
+    fname = "../" + fname;
+  }
+  String st[] = loadStrings(fname);
+  if(st == null)
+    return;
+  cb_save.setArrayValue(decode(st[0]));
+  savemode.setValue(decode(st[1])[0]);
+  cb_hide.setArrayValue(decode(st[2]));
+  axismode.setValue(decode(st[3])[0]);
+  fillmode.setValue(decode(st[4])[0]);
+  valorx.setValue(decode(st[5])[0]);
+  valory.setValue(decode(st[6])[0]);
+  valorz.setValue(decode(st[7])[0]);
+  qtd.setValue(decode(st[8])[0]);
+  ac_unit.setValue(decode(st[9])[0]);
+  gy_unit.setValue(decode(st[10])[0]);
+  scale.setValue(decode(st[11])[0]);
+  sample.setValue(decode(st[12])[0]);
+  
+  cp5.get(Textfield.class,"txt1").setText(nf(decode(st[13])[0], 1, 4));
+  cp5.get(Textfield.class,"txt2").setText(nf(decode(st[14])[0], 1, 4));
+  cp5.get(Textfield.class,"txt3").setText(nf(decode(st[15])[0], 1, 4));
+  d1 = gettext(1);
+  d2 = gettext(2);
+  d3 = gettext(3);
+  
+  rename(savemode,"Salvar uma vez:Sobrepor arquivo:Salvar continuamente",decode(st[1])[0]);
+  rename(axismode,"Modo YT:Modo XY",decode(st[3])[0]);
+  rename(fillmode,"Pontos:Linhas",decode(st[4])[0]);
+  rename(valorx,"Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Abertura:Desvio",decode(st[5])[0]);
+  rename(valory,"Acel Y:Acel Z:Acel X:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Abertura:Desvio",decode(st[6])[0]);
+  rename(valorz,"Acel Z:Acel Y:Acel X:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Abertura:Desvio",decode(st[7])[0]);
+  rename(qtd,"3:2:1",decode(st[8])[0]);
+  rename(ac_unit,"m/s^2:g",decode(st[9])[0]);
+  rename(gy_unit,"grau/s:rad/s",decode(st[10])[0]);
+  rename(scale,"1x:2x:3x:4x:5x",decode(st[11])[0]);
+  rename(sample,"400 (padrao):50:100:200:250:500:750:1000",decode(st[12])[0]);
+}
+void rename(DropdownList d, String s, float index)
+{
+  String v[] = split(s, ":");
+  if(index > v.length)
+    return;
+  d.setLabel(v[(int)index]);
+}
+void savePreferences() // Salva as preferencias
+{
+  String fname = "data.xyz";
+  if(!(getFolder().equals("Processing")))
+  {
+    fname = "../" + fname;
+  }
+  String st[] = new String[16];
+  
+  st[0] = "saveFile=" + cb_save.getArrayValue()[0];
+  st[1] = "saveMode=" + savemode.getValue();
+  st[2] = "hideText=" + cb_hide.getArrayValue()[0];
+  st[3] = "axisMode=" + axismode.getValue();
+  st[4] = "fillMode=" + fillmode.getValue();
+  st[5] = "val1=" + valorx.getValue();
+  st[6] = "val2=" + valory.getValue();
+  st[7] = "val3=" + valorz.getValue();
+  st[8] = "valNum=" + qtd.getValue();
+  st[9] = "unitAcc=" + ac_unit.getValue();
+  st[10] = "unitGyr=" + gy_unit.getValue();
+  st[11] = "scaleMode=" + scale.getValue();
+  st[12] = "sampleRate=" + sample.getValue();
+  st[13] = "measure1=" + gettext(1);
+  st[14] = "measure2=" + gettext(2);
+  st[15] = "measure3=" + gettext(3);
+  saveStrings(fname,st);
+}
+
+float[] decode(String val)
+{
+  float st[] = new float[1];
+  String stemp[] = split(val, "=");
+  st[0] = float(stemp[1]);
+  return st;
 }
 void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na porta serial
 {
@@ -702,6 +795,16 @@ void txt_standard(String title, int xpos, int ypos)
      .setColorActive(color(0));
 }
 
+void bang_standard(String title, int xpos, int ypos)
+{
+  cp5.addBang(title)
+       .setPosition(xpos, ypos)
+       .setSize(40, 40)
+       .setColorActive(color(0))
+       .setColorBackground(color(0))
+       .setColorCaptionLabel(color(0))
+       .setColorForeground(color(0));
+}
 float lowpass(float read, float old, float pct)
 {
   return pct*read + (1-pct)*old;
@@ -802,13 +905,21 @@ String getFolder()
 float gettext(int val)
 {
   String txtname = "txt"+val;
-  int i;
+  int i, dt = 0;
   String num = cp5.get(Textfield.class, txtname).getText();
   if(num.length() == 0)
     return 0;
   for(i = 0;i < num.length();i++)
+  {
+    if(int(num.charAt(i)) == ',')
+      num = num.replace(',', '.');
+    if(int(num.charAt(i)) == '.')
+      dt++;
+    if(dt>1)
+      return 0;
     if((int(num.charAt(i)) < '0' || int(num.charAt(i)) > '9') && int(num.charAt(i)) != '.')
       return 0;
+  }
   
   return float(num);
 }
