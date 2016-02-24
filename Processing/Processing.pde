@@ -871,10 +871,15 @@ void writecsv(int rFlag, float data1[], float data2[], float data3[], String fna
   {
     tbl = new Table();
     tbl.setString(0,0,"sep=");
-    tbl.setString(1,0,"Dado 1");
-    tbl.setString(1,1,"Dado 2");
-    if(mode_xy == 0)
-    tbl.setString(1,2,"Dado 3");
+    switch(int(qtd.getValue()))
+    {
+      case 0:
+        tbl.setString(1,2,valorz.getLabel());      
+      case 1:
+        tbl.setString(1,1,valory.getLabel());
+      case 2:
+        tbl.setString(1,0,valorx.getLabel());
+    }
   }
   else
     tbl = loadTable(fname);
@@ -883,10 +888,15 @@ void writecsv(int rFlag, float data1[], float data2[], float data3[], String fna
   for(int i=0;i<vSize;i++)
   {
     line = tbl.addRow();
-    line.setFloat(0, data1[i]);
-    line.setFloat(1, data2[i]);
-    if(mode_xy == 0)
-    line.setFloat(2, data3[i]);
+    switch(int(qtd.getValue()))
+    {
+      case 0:
+        line.setFloat(2, data3[i]);
+      case 1:
+        line.setFloat(1, data2[i]);
+      case 2:
+        line.setFloat(0, data1[i]);
+    }
   }
   saveTable(tbl, fname);
   
