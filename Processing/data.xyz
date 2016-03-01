@@ -1,5 +1,5 @@
 saveFile=0.0
-saveMode=0.0
+saveMode=2.0
 hideText=0.0
 axisMode=0.0
 fillMode=1.0
@@ -11,6 +11,7 @@ unitAcc=0.0
 unitGyr=0.0
 scaleMode=0.0
 sampleRate=0.0
-measure1=120.0
-measure2=95.0
-measure3=270.0
+measure1=6.2
+measure2=10.0
+measure3=110.0
+measure4=20.0
