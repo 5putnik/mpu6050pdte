@@ -176,7 +176,8 @@ void setup() // Inicializacao do programa
   size(800, 600, P2D); // Gerando uma tela 800x600 com renderizacao 2D melhorada
   if(Serial.list().length == 0)
     return;
-  myPort = new Serial(this, Serial.list()[0], 9600); // Associando MyPort as portas seriais do computador
+  //myPort = new Serial(this, Serial.list()[0], 9600); // Associando MyPort as portas seriais do computador
+  myPort = new Serial(this, Serial.list()[0], 115200); // Associando MyPort as portas seriais do computador (alta velocidade)
   myPort.bufferUntil('\n'); // Busca por \n
   colorMode(RGB, 1);
   f = createFont("Arial", 16, true); // Escolhendo fonte do texto como Arial 16
@@ -501,6 +502,8 @@ void draw() // Rotina em repeticao permanente
   {
     text("Unidade:", 270, 230); // Texto informativo
     text("Unidade:", 270, 310); // Texto informativo
+    //text("Delay:" + int(1000*dt) + "ms (" + int(1/dt) + " Hz)", 10, 410); // Imprime mensagem de erro
+    
     if(accel_x == -1.0 && accel_y == -1.0 && accel_z == -1.0 && gyro_x == -1.0 && gyro_y == -1.0 && gyro_z == -1.0 && tmp == 36.53) // Se todos forem iguais ao valor que geralmente representa erro no protocolo I2C de comunicacao
     {
       text("Leitura acelerometro X: Erro na comunicacao!", 10, 230); // Imprime mensagem de erro
@@ -664,7 +667,7 @@ void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na po
   if(xString != null) // Se algo foi lido
   {
     String  temp[]  =  split(xString,":"); // Separar os dados cada vez que dois-pontos for encontrado
-    if(xString.charAt(0)  ==  '#'  &&  temp.length==8) // Se o primeiro caractere escrito for cerquilha e 8 elementos forem lidos
+    if(xString.charAt(0)  ==  '#'  &&  temp.length==7) // Se o primeiro caractere escrito for cerquilha e 8 elementos forem lidos
     {
       dt = (millis() - acu)/1000.0;
       if(!start_prog)
@@ -678,13 +681,13 @@ void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na po
        * Sendo cada numero entre os dois-pontos uma das leituras, na ordem:
        * acelerometro x, y, z, temperatura, giroscopio x, y, z
        * */
-      accel_x = (float(temp[1]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
-      accel_y = (float(temp[2]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
-      accel_z = (float(temp[3]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
-      tmp = float(temp[4]); // Atualiza variavel global
-      gyro_x = (float(temp[5]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
-      gyro_y = (float(temp[6]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
-      gyro_z = (float(temp[7]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
+      accel_x = (float(temp[0].substring(1, temp[0].length()-1 )) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
+      accel_y = (float(temp[1]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
+      accel_z = (float(temp[2]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
+      tmp = float(temp[3]); // Atualiza variavel global
+      gyro_x = (float(temp[4]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
+      gyro_y = (float(temp[5]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
+      gyro_z = (float(temp[6]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       if(g_c < 10)
       {
         g_c++;

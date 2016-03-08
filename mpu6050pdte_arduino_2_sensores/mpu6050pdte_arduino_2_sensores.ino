@@ -20,7 +20,8 @@ void setup(){
   Wire.write(0);     // zera registrador, acordando o MPU-6050
   Wire.endTransmission(true);
   
-  Serial.begin(9600); // Inicia o processo serial
+  //Serial.begin(9600); // Inicia o processo serial
+  Serial.begin(115200); // Inicia o processo serial (alta velocidade)
 }
 void loop(){
   Wire.beginTransmission(MPU1);
@@ -65,7 +66,7 @@ void loop(){
   GyY = GyY1 - GyY2;
   GyZ = GyZ1 - GyZ2;
   
-  Serial.print("#X:");
+  Serial.print("#");
   Serial.print(AcX);
   Serial.print(":");
   Serial.print(AcY);

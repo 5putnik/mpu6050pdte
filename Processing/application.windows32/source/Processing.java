@@ -20,7 +20,7 @@ public class Processing extends PApplet {
 
 
 
-final float version = 1.3f;
+final float version = 1.4f;
 
 // Parametros fixos
 float dt = 0.02f; // Passo entre as medicoes (20 ms) (pode variar)
@@ -95,8 +95,12 @@ class Obj_Kalman
     this.ang = ang;
   }
 
-  public float kalman_step(float read_vel, float read_ang) // Definindo a funcao do filtro com base no valor anterior e no valor lido
+  public float kalman_step(float read_vel/*, float read_ang*/) // Definindo a funcao do filtro com base no valor anterior e no valor lido
   {
+    this.bias = 0.96f * read_vel + 0.04f * this.bias;
+    this.ang += bias * dt;
+    return ang;
+    /*
     float rate = read_vel - bias;
     this.ang += dt * rate;
     this.P00 += dt * (dt*P11 - P01 - P10 + Qt);
@@ -116,7 +120,7 @@ class Obj_Kalman
     
     this.ang += K0*y;
     this.bias += K1*y;
-    return ang;
+    return ang;*/
   }
 }
 
@@ -145,16 +149,14 @@ float ang_x = 0, // Valor Angulo X em graus
       dis_y = 0, // Distancia no eixo Y (desvio)
       dis_z = 0; // Distancia no eixo Z (protracao)
 
-float grav_x, grav_y, grav_z; // Componentes da gravidade
-
 float grav = 9.81f; // Gravidade
-int g_c = 0; // Contador auxiliar para calculo da gravidade
-
-float gx = 0, // Leitura inicial da gravidade
-      gy = 1, // Leitura inicial da gravidade (admite-se gravidade atuando unicamente no eixo Y)
-      gz = 0; // Leitura inicial da gravidade
-
-
+float offset_acx = 0, // Valor de offset
+      offset_acy = 0, // Valor de offset
+      offset_acz = 0, // Valor de offset
+      offset_gyx = 0, // Valor de offset
+      offset_gyy = 0, // Valor de offset
+      offset_gyz = 0; // Valor de offset
+int g_c = 0; // Contador para as primeiras iteracoes do programa
 
 PFont f; // Fonte do texto
 
@@ -170,7 +172,6 @@ DropdownList axismode, // lista para escolher o modo eixo (XY ou YT)
              valorz, // lista de valores a serem plotados (valor 3, apenas para YT)
              ac_unit, // lista de unidade do acelerometro (m/s\u00b2 ou g)
              gy_unit, // lista de unidade do giroscopio (\u00ba/s ou rad/s)
-             filter, // lista de filtros
              scale, // lista de escalas
              sample, // selecao de dados amostrados
              savemode; // modo de armazenamento
@@ -182,7 +183,6 @@ int mode_xy = 1, // 1: Modo XY, 0: Modo YT
     mode_x = 1, // Modo de selecao do eixo X (modo XY) ou variavel 1 (modo YT)
     mode_y = 1, // Modo de selecao do eixo Y (modo XY) ou variavel 2 (modo YT)
     mode_z = 1, // Modo de selecao variavel 3 (apenas modo YT)
-    mode_filter = 1, // 1: Filtro passa-baixas selecionado, 0: Valores crus
     mode_scale = 1, // Modo de selecao de escala
     mode_sample = 1; // Modo de selecao da taxa de dados salvos por ciclo
     
@@ -195,7 +195,8 @@ public void setup() // Inicializacao do programa
    // Gerando uma tela 800x600 com renderizacao 2D melhorada
   if(Serial.list().length == 0)
     return;
-  myPort = new Serial(this, Serial.list()[0], 9600); // Associando MyPort as portas seriais do computador
+  //myPort = new Serial(this, Serial.list()[0], 9600); // Associando MyPort as portas seriais do computador
+  myPort = new Serial(this, Serial.list()[0], 115200); // Associando MyPort as portas seriais do computador (alta velocidade)
   myPort.bufferUntil('\n'); // Busca por \n
   colorMode(RGB, 1);
   f = createFont("Arial", 16, true); // Escolhendo fonte do texto como Arial 16
@@ -207,32 +208,30 @@ public void setup() // Inicializacao do programa
   valorz = cp5.addDropdownList("Acel Z", 230, 140, 100, 84); // Insercao da lista valorz
   ac_unit = cp5.addDropdownList("m/s^2", 270, 235, 100, 84); // Insercao da lista ac_unit
   gy_unit = cp5.addDropdownList("grau/s", 270, 315, 100, 84); // Insercao da lista gy_unit
-  filter = cp5.addDropdownList("Raw", XMAX/2 + 45, 2*gap + sqrwidth, 100, 84); // Insercao da lista filter
-  scale = cp5.addDropdownList("1x", XMAX/2 + 150, 2*gap + sqrwidth, 100, 84); // Insercao da lista scale
+  scale = cp5.addDropdownList("1x", XMAX/2 + 50, 2*gap + sqrwidth, 100, 84); // Insercao da lista scale
   sample = cp5.addDropdownList("400 (padrao)", XMAX/2 + 255, 2*gap + sqrwidth, 100, 84); // Insercao da lista sample
   savemode = cp5.addDropdownList("Salvar uma vez", 120, 15, 120, 84); // Insercao da lista savemode
   qtd = cp5.addDropdownList("3", 340, 140, 30, 84); // Insercao da lista qtd
   
   ddl_standard(axismode, "Modo YT:Modo XY"); // Cria a lista axismode
   ddl_standard(fillmode, "Pontos:Linhas"); // Cria a lista fillmode
-  ddl_standard(scale, "1x:2x:3x:4x:5x"); // Cria a lista scale
-  ddl_standard(filter, "Raw:Low-pass"); // Cria a lista filter
+  ddl_standard(scale, "1x:2x:3x:4x:5x:6x:7x:8x:9x:10x"); // Cria a lista scale
   ddl_standard(sample, "400 (padrao):50:100:200:250:500:750:1000"); // Cria a lista filter
   ddl_standard(ac_unit, "m/s^2:g"); // Cria a lista ac_unit
   ddl_standard(gy_unit, "grau/s:rad/s"); // Cria a lista gy_unit
-  ddl_standard(valorx, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Abertura:Desvio"); // Cria a lista valorx
-  ddl_standard(valory, "Acel Y:Acel Z:Acel X:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Abertura:Desvio"); // Cria a lista valory
-  ddl_standard(valorz, "Acel Z:Acel Y:Acel X:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Abertura:Desvio"); // Cria a lista valorz
+  ddl_standard(valorx, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valorx
+  ddl_standard(valory, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valory
+  ddl_standard(valorz, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valorz
   ddl_standard(savemode, "Salvar uma vez:Sobrepor arquivo:Salvar continuamente"); // Cria a lista savemode
   ddl_standard(qtd, "3:2:1"); // Cria a lista qtd
   
   cb_save = cb_standard("Salvar arquivo?", 10, 10); // Cria o CheckBox cb_save
   cb_hide = cb_standard("Esconder textos desnecessarios", 10, 35); // Cria o CheckBox cb_hide
   
-  txt_standard("txt1", XMAX/2 + 155, 2*gap + sqrwidth + 20);
+  /*txt_standard("txt1", XMAX/2 + 155, 2*gap + sqrwidth + 20);
   txt_standard("txt2", XMAX/2 + 155, 2*gap + sqrwidth + 45);
   txt_standard("txt3", XMAX/2 + 155, 2*gap + sqrwidth + 70);
-  txt_standard("txt4", XMAX/2 + 155, 2*gap + sqrwidth + 95);
+  txt_standard("txt4", XMAX/2 + 155, 2*gap + sqrwidth + 95);*/
   
   bang_standard("Salvar preferencias", 250, 15);
   bang_standard("Reset", 250, 70);
@@ -261,34 +260,29 @@ public void draw() // Rotina em repeticao permanente
     background(0); // Tela de fundo preta
     text("ERRO: Arduino nao conectado. Conecte o Arduino e reinicie o programa.",200,200);
   }
-  if(!start_prog)
+  if(!start_prog || g_c < 10)
     return;
   background(255, 255, 255); // Tela de fundo branca
   textFont(f, 16); // Fonte tamanho 16
   rectMode(CORNERS); // Modo de desenho dos retangulos como CORNERS
-  int i; // Variavel geral de laco
-  if(g_c < 10)
-  {
-    g_c++;
-    grav = 0.04f*grav + 9.81f * 0.96f * sqrt(accel_x*accel_x + accel_y*accel_y + accel_z*accel_z); 
-  }
-  
-  if(g_c == 1) loadPreferences(); // Carrega as preferencias
+  int i; // Variavel geral de laco 
   
   text("v" + nf(version, 1, 0), XMAX-50, 580); 
   
-  ang_x = k_x.kalman_step(gyro_x, ang_x); // Filtro de Kalman para selecionar o angulo
-  ang_y = k_y.kalman_step(gyro_y, ang_y); // Filtro de Kalman para selecionar o angulo
-  ang_z = k_z.kalman_step(gyro_z, ang_z); // Filtro de Kalman para selecionar o angulo
+  ang_x = k_x.kalman_step(gyro_x/*, ang_x*/); // Filtro de Kalman para selecionar o angulo
+  ang_y = k_y.kalman_step(gyro_y/*, ang_y*/); // Filtro de Kalman para selecionar o angulo
+  ang_z = k_z.kalman_step(gyro_z/*, ang_z*/); // Filtro de Kalman para selecionar o angulo
   
-  dis_x = d_x.step_x(ang_y); // Angulos permutados por viabilidade do sensor
-  dis_y = d_y.step_y(ang_x); // Angulos permutados por viabilidade do sensor
+  //dis_x = d_x.step_x(ang_x); // (AINDA NAO IMPLEMENTADO)
+  //dis_y = d_y.step_y(ang_y); // (AINDA NAO IMPLEMENTADO)
   //dis_z = d_z.step_z(ang_z); // (AINDA NAO IMPLEMENTADO)
   
+  text(PApplet.parseInt(scx / (1 + mode_scale)), 350, 20);
+  text(PApplet.parseInt(-scx / (1 + mode_scale)), 350, 410);
   if((int)cb_hide.getArrayValue()[0] == 0)
   {
-    text("Abertura: " + PApplet.parseInt(dis_x) + " mm", 10, 410);
-    text("Desvio: " + PApplet.parseInt(dis_y) + " mm", 10, 430);
+    /*text("Abertura: " + int(dis_x) + " mm", 10, 410);
+    text("Desvio: " + int(dis_y) + " mm", 10, 430);*/
     
     text("Drifting x: " + nf(k_x.bias, 1, 2) + "\u00ba/s", 10, 470); // Imprimindo o valor da gravidade na tela
     text("Drifting y: " + nf(k_y.bias, 1, 2) + "\u00ba/s", 10, 490); // Imprimindo o valor da gravidade na tela
@@ -356,7 +350,6 @@ public void draw() // Rotina em repeticao permanente
   if(mode_x != PApplet.parseInt(valorx.getValue()) || 
      mode_y != PApplet.parseInt(valory.getValue()) || 
      mode_z != PApplet.parseInt(valorz.getValue()) || 
-     mode_filter != PApplet.parseInt(filter.getValue()) || 
      mode_xy != PApplet.parseInt(axismode.getValue()) || 
      mode_sample != PApplet.parseInt(sample.getValue()) || 
      mode_scale != PApplet.parseInt(scale.getValue())) // Se o grafico for alterado
@@ -372,98 +365,54 @@ public void draw() // Rotina em repeticao permanente
   mode_x = PApplet.parseInt(valorx.getValue()); // Salvando alteracoes na lista
   mode_y = PApplet.parseInt(valory.getValue()); // Salvando alteracoes na lista
   mode_z = PApplet.parseInt(valorz.getValue()); // Salvando alteracoes na lista
-  mode_filter = PApplet.parseInt(filter.getValue()); // Salvando alteracoes na lista
   mode_scale = PApplet.parseInt(scale.getValue());  // Salvando alteracoes na lista
+  
+  f_dadox[c] = getdata(PApplet.parseInt(valorx.getValue()));
+  f_dadoy[c] = getdata(PApplet.parseInt(valory.getValue()));
+  f_dadoz[c] = getdata(PApplet.parseInt(valorz.getValue()));
   
   switch(PApplet.parseInt(valorx.getValue())) // Selecao de variavel eixo X
   {
-    case 0:
-      f_dadox[c] = accel_x;
-      scx = reg_ac;
-      break;
-    case 1:
-      f_dadox[c] = accel_y;
-      scx = reg_ac;
-      break;
-    case 2:
-      f_dadox[c] = accel_z;
+    case 0: case 1: case 2:
       scx = reg_ac;
       break;
     case 3: case 4: case 5:
       scx = reg_gy;
-      f_dadox[c] = getdata(PApplet.parseInt(valorx.getValue()));
       break;
     case 6: case 7: case 8:
       scx = reg_ang;
-      f_dadox[c] = getdata(PApplet.parseInt(valorx.getValue()));
       break;
     case 9: case 10: case 11:
       scx = reg_pos;
-      f_dadox[c] = getdata(PApplet.parseInt(valorx.getValue()));
   }
   switch(PApplet.parseInt(valory.getValue())) // Selecao de variavel eixo Y
   {
-    case 0:
-      f_dadoy[c] = accel_y;
-      scy = reg_ac;
-      break;
-    case 1:
-      f_dadoy[c] = accel_z;
-      scy = reg_ac;
-      break;
-    case 2:
-      f_dadoy[c] = accel_x;
+    case 0: case 1: case 2:
       scy = reg_ac;
       break;
     case 3: case 4: case 5:
       scy = reg_gy;
-      f_dadoy[c] = getdata(PApplet.parseInt(valory.getValue()));
       break;
     case 6: case 7: case 8:
       scy = reg_ang;
-      f_dadoy[c] = getdata(PApplet.parseInt(valory.getValue()));
       break;
     case 9: case 10: case 11:
       scy = reg_pos;
-      f_dadoy[c] = getdata(PApplet.parseInt(valory.getValue()));
   }
   
   switch(PApplet.parseInt(valorz.getValue())) // Selecao de variavel 3
   {
-    case 0:
-      f_dadoz[c] = accel_z;
-      scz = reg_ac;
-      break;
-    case 1:
-      f_dadoz[c] = accel_y;
-      scz = reg_ac;
-      break;
-    case 2:
-      f_dadoz[c] = accel_x;
+    case 0: case 1: case 2:
       scz = reg_ac;
       break;
     case 3: case 4: case 5:
       scz = reg_gy;
-      f_dadoz[c] = getdata(PApplet.parseInt(valorz.getValue()));
       break;
     case 6: case 7: case 8:
       scz = reg_ang;
-      f_dadoz[c] = getdata(PApplet.parseInt(valorz.getValue()));
       break;
     case 9: case 10: case 11:
-      scz = reg_pos;
-      f_dadoz[c] = getdata(PApplet.parseInt(valorz.getValue()));    
-  }
-  
-  if(c > 0) switch(PApplet.parseInt(filter.getValue())) // Selecao do filtro (somente a partir da segunda leitura)
-  {
-    case 0: // Valores crus: fazer nada
-      break;
-    case 1:  // Passa-baixas
-      f_dadox[c] = lowpass(f_dadox[c], f_dadox[c-1], 0.96f);
-      f_dadoy[c] = lowpass(f_dadoy[c], f_dadoy[c-1], 0.96f);
-      f_dadoz[c] = lowpass(f_dadoz[c], f_dadoz[c-1], 0.96f);
-      break;
+      scz = reg_pos;    
   }
   
   noFill(); // Desabilita preenchimento
@@ -557,20 +506,23 @@ public void draw() // Rotina em repeticao permanente
   fill(0); // Preenche proximos desenhos de preto
   text("Valores a serem representados no grafico:", 10, 135); // Texto informativo
   text("Propriedades de visualizacao:", 10, 75); // Texto informativo
-  text("Filtro:", XMAX/2, 3*gap + sqrwidth); // Texto informativo
-  text("Ramo da mandibula:", XMAX/2, 2*gap + sqrwidth + 35); // Texto informativo
+  text("Zoom:", XMAX/2, 3*gap + sqrwidth); // Texto informativo
+  text("Amostragem:", XMAX/2+ 155, 3*gap + sqrwidth); // Texto informativo
+  /*text("Ramo da mandibula:", XMAX/2, 2*gap + sqrwidth + 35); // Texto informativo
   text("Corpo da mandibula:", XMAX/2, 2*gap + sqrwidth + 60); // Texto informativo
   text("Angulo da mandibula:", XMAX/2, 2*gap + sqrwidth + 85); // Texto informativo
   text("Comprimento lateral:", XMAX/2, 2*gap + sqrwidth + 110); // Texto informativo
   text("cm", XMAX/2 + 260, 2*gap + sqrwidth + 35); // Texto informativo
   text("cm", XMAX/2 + 260, 2*gap + sqrwidth + 60); // Texto informativo
   text("\u00ba", XMAX/2 + 260, 2*gap + sqrwidth + 85); // Texto informativo
-  text("cm", XMAX/2 + 260, 2*gap + sqrwidth + 110); // Texto informativo
+  text("cm", XMAX/2 + 260, 2*gap + sqrwidth + 110); // Texto informativo*/
 
   if((int)cb_hide.getArrayValue()[0] == 0)
   {
     text("Unidade:", 270, 230); // Texto informativo
     text("Unidade:", 270, 310); // Texto informativo
+    //text("Delay:" + int(1000*dt) + "ms (" + int(1/dt) + " Hz)", 10, 410); // Imprime mensagem de erro
+    
     if(accel_x == -1.0f && accel_y == -1.0f && accel_z == -1.0f && gyro_x == -1.0f && gyro_y == -1.0f && gyro_z == -1.0f && tmp == 36.53f) // Se todos forem iguais ao valor que geralmente representa erro no protocolo I2C de comunicacao
     {
       text("Leitura acelerometro X: Erro na comunicacao!", 10, 230); // Imprime mensagem de erro
@@ -589,22 +541,23 @@ public void draw() // Rotina em repeticao permanente
       text("Leitura giroscopio X: " + gyx, 10, 310); // Imprime valor lido
       text("Leitura giroscopio Y: " + gyy, 10, 330); // Imprime valor lido
       text("Leitura giroscopio Z: " + gyz, 10, 350); // Imprime valor lido
-      text("Temperatura: " + tmp + "\u00baC", 10, 390); // Imprime valor lido
+      text("Temperatura: " + PApplet.parseInt(tmp) + "\u00baC", 10, 390); // Imprime valor lido
     }
   }
 }
  
-public void keyReleased() // Evento que ocorre toda vez que uma tecla for pressionada
+/*void keyReleased() // Evento que ocorre toda vez que uma tecla for pressionada
 {
   d1 = gettext(1);
   d2 = gettext(2);
   d3 = gettext(3);
   d4 = gettext(4);
-}
+}*/
 
 public void controlEvent(ControlEvent ev)
 {
-  create_file();
+  if(ev.isFrom(cb_save))
+    create_file();
   if((ev.isFrom(cb_save)) || (ev.isFrom(cb_hide)))
     return;
   if(ev.getController().getName().equals("Salvar preferencias"))
@@ -620,6 +573,7 @@ public void controlEvent(ControlEvent ev)
       f_dadoy[i] = 0;
       f_dadoz[i] = 0;
     }
+    g_c = 0;
     c = 0;
     k_x.ang = 0;
     k_y.ang = 0;
@@ -627,6 +581,12 @@ public void controlEvent(ControlEvent ev)
     d_x.x = 0;
     d_y.x = 0;
     d_z.x = 0;
+    offset_acx = 0; // Valor de offset
+    offset_acy = 0; // Valor de offset
+    offset_acz = 0; // Valor de offset
+    offset_gyx = 0; // Valor de offset
+    offset_gyy = 0; // Valor de offset
+    offset_gyz = 0; // Valor de offset
   }
 }
 
@@ -654,26 +614,28 @@ public void loadPreferences()
   scale.setValue(decode(st[11])[0]);
   sample.setValue(decode(st[12])[0]);
   
-  cp5.get(Textfield.class,"txt1").setText(nf(decode(st[13])[0], 1, 4));
+  /*cp5.get(Textfield.class,"txt1").setText(nf(decode(st[13])[0], 1, 4));
   cp5.get(Textfield.class,"txt2").setText(nf(decode(st[14])[0], 1, 4));
   cp5.get(Textfield.class,"txt3").setText(nf(decode(st[15])[0], 1, 4));
-  cp5.get(Textfield.class,"txt4").setText(nf(decode(st[16])[0], 1, 4));
+  cp5.get(Textfield.class,"txt4").setText(nf(decode(st[16])[0], 1, 4));*/
   
-  d1 = gettext(1);
+  /*d1 = gettext(1);
   d2 = gettext(2);
   d3 = gettext(3);
-  
+  d4 = gettext(4);*/
   rename(savemode,"Salvar uma vez:Sobrepor arquivo:Salvar continuamente",decode(st[1])[0]);
   rename(axismode,"Modo YT:Modo XY",decode(st[3])[0]);
   rename(fillmode,"Pontos:Linhas",decode(st[4])[0]);
-  rename(valorx,"Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Abertura:Desvio",decode(st[5])[0]);
-  rename(valory,"Acel Y:Acel Z:Acel X:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Abertura:Desvio",decode(st[6])[0]);
-  rename(valorz,"Acel Z:Acel Y:Acel X:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Abertura:Desvio",decode(st[7])[0]);
+  rename(valorx,"Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z",decode(st[5])[0]);
+  rename(valory,"Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z",decode(st[6])[0]);
+  rename(valorz,"Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z",decode(st[7])[0]);
   rename(qtd,"3:2:1",decode(st[8])[0]);
   rename(ac_unit,"m/s^2:g",decode(st[9])[0]);
   rename(gy_unit,"grau/s:rad/s",decode(st[10])[0]);
-  rename(scale,"1x:2x:3x:4x:5x",decode(st[11])[0]);
+  rename(scale,"1x:2x:3x:4x:5x:6x:7x:8x:9x:10x",decode(st[11])[0]);
   rename(sample,"400 (padrao):50:100:200:250:500:750:1000",decode(st[12])[0]);
+  if(PApplet.parseInt(savemode.getValue()) == 1)
+    create_file();
 }
 public void rename(DropdownList d, String s, float index)
 {
@@ -704,10 +666,10 @@ public void savePreferences() // Salva as preferencias
   st[10] = "unitGyr=" + gy_unit.getValue();
   st[11] = "scaleMode=" + scale.getValue();
   st[12] = "sampleRate=" + sample.getValue();
-  st[13] = "measure1=" + gettext(1);
+  /*st[13] = "measure1=" + gettext(1);
   st[14] = "measure2=" + gettext(2);
   st[15] = "measure3=" + gettext(3);
-  st[16] = "measure4=" + gettext(4);
+  st[16] = "measure4=" + gettext(4);*/
   saveStrings(fname,st);
 }
 
@@ -724,7 +686,7 @@ public void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrit
   if(xString != null) // Se algo foi lido
   {
     String  temp[]  =  split(xString,":"); // Separar os dados cada vez que dois-pontos for encontrado
-    if(xString.charAt(0)  ==  '#'  &&  temp.length==8) // Se o primeiro caractere escrito for cerquilha e 8 elementos forem lidos
+    if(xString.charAt(0)  ==  '#'  &&  temp.length==7) // Se o primeiro caractere escrito for cerquilha e 8 elementos forem lidos
     {
       dt = (millis() - acu)/1000.0f;
       if(!start_prog)
@@ -738,16 +700,34 @@ public void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrit
        * Sendo cada numero entre os dois-pontos uma das leituras, na ordem:
        * acelerometro x, y, z, temperatura, giroscopio x, y, z
        * */
-      accel_x = (PApplet.parseFloat(temp[1]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
-      accel_y = (PApplet.parseFloat(temp[2]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
-      accel_z = (PApplet.parseFloat(temp[3]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
-      tmp = PApplet.parseFloat(temp[4]); // Atualiza variavel global
-      gyro_x = (PApplet.parseFloat(temp[5]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
-      gyro_y = (PApplet.parseFloat(temp[6]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
-      gyro_z = (PApplet.parseFloat(temp[7]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
-      /*if(abs(gyro_x) < reg_gy/100) gyro_x = 0;
-      if(abs(gyro_y) < reg_gy/100) gyro_y = 0;
-      if(abs(gyro_z) < reg_gy/100) gyro_z = 0;*/
+      accel_x = (PApplet.parseFloat(temp[0].substring(1, temp[0].length()-1 )) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
+      accel_y = (PApplet.parseFloat(temp[1]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
+      accel_z = (PApplet.parseFloat(temp[2]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
+      tmp = PApplet.parseFloat(temp[3]); // Atualiza variavel global
+      gyro_x = (PApplet.parseFloat(temp[4]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
+      gyro_y = (PApplet.parseFloat(temp[5]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
+      gyro_z = (PApplet.parseFloat(temp[6]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
+      if(g_c < 10)
+      {
+        g_c++;
+        offset_acx += 0.1f * accel_x;
+        offset_acy += 0.1f * accel_y;
+        offset_acz += 0.1f * accel_z;
+        offset_gyx += 0.1f * gyro_x;
+        offset_gyy += 0.1f * gyro_y;
+        offset_gyz += 0.1f * gyro_z;
+        println(offset_acx + ":" + offset_acy + ":" + offset_acz + ":" + offset_gyx + ":" + offset_gyy + ":" + offset_gyz);
+      }
+      else
+      {
+        accel_x = accel_x - offset_acx;
+        accel_y = accel_y - offset_acy;
+        accel_z = accel_z - offset_acz;
+        gyro_x = gyro_x - offset_gyx;
+        gyro_y = gyro_y - offset_gyy;
+        gyro_z = gyro_z - offset_gyz;
+      }
+      if(g_c == 1) loadPreferences(); // Carrega as preferencias
     }
 
   }
