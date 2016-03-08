@@ -126,16 +126,14 @@ float ang_x = 0, // Valor Angulo X em graus
       dis_y = 0, // Distancia no eixo Y (desvio)
       dis_z = 0; // Distancia no eixo Z (protracao)
 
-float grav_x, grav_y, grav_z; // Componentes da gravidade
-
 float grav = 9.81; // Gravidade
-int g_c = 0; // Contador auxiliar para calculo da gravidade
-
-float gx = 0, // Leitura inicial da gravidade
-      gy = 1, // Leitura inicial da gravidade (admite-se gravidade atuando unicamente no eixo Y)
-      gz = 0; // Leitura inicial da gravidade
-
-
+float offset_acx = 0, // Valor de offset
+      offset_acy = 0, // Valor de offset
+      offset_acz = 0, // Valor de offset
+      offset_gyx = 0, // Valor de offset
+      offset_gyy = 0, // Valor de offset
+      offset_gyz = 0; // Valor de offset
+int g_c = 0; // Contador para as primeiras iteracoes do programa
 
 PFont f; // Fonte do texto
 
@@ -242,19 +240,12 @@ void draw() // Rotina em repeticao permanente
     background(0); // Tela de fundo preta
     text("ERRO: Arduino nao conectado. Conecte o Arduino e reinicie o programa.",200,200);
   }
-  if(!start_prog)
+  if(!start_prog || g_c < 10)
     return;
   background(255, 255, 255); // Tela de fundo branca
   textFont(f, 16); // Fonte tamanho 16
   rectMode(CORNERS); // Modo de desenho dos retangulos como CORNERS
-  int i; // Variavel geral de laco
-  if(g_c < 10)
-  {
-    g_c++;
-    grav = 0.04*grav + 9.81 * 0.96 * sqrt(accel_x*accel_x + accel_y*accel_y + accel_z*accel_z); 
-  }
-  
-  if(g_c == 1) loadPreferences(); // Carrega as preferencias
+  int i; // Variavel geral de laco 
   
   text("v" + nf(version, 1, 0), XMAX-50, 580); 
   
@@ -601,6 +592,7 @@ public void controlEvent(ControlEvent ev)
       f_dadoy[i] = 0;
       f_dadoz[i] = 0;
     }
+    g_c = 0;
     c = 0;
     k_x.ang = 0;
     k_y.ang = 0;
@@ -726,9 +718,27 @@ void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na po
       gyro_x = (float(temp[5]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       gyro_y = (float(temp[6]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       gyro_z = (float(temp[7]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
-      /*if(abs(gyro_x) < reg_gy/100) gyro_x = 0;
-      if(abs(gyro_y) < reg_gy/100) gyro_y = 0;
-      if(abs(gyro_z) < reg_gy/100) gyro_z = 0;*/
+      if(g_c < 10)
+      {
+        g_c++;
+        offset_acx += 0.1 * accel_x;
+        offset_acy += 0.1 * accel_y;
+        offset_acz += 0.1 * accel_z;
+        offset_gyx += 0.1 * gyro_x;
+        offset_gyy += 0.1 * gyro_y;
+        offset_gyz += 0.1 * gyro_z;
+        println(offset_acx + ":" + offset_acy + ":" + offset_acz + ":" + offset_gyx + ":" + offset_gyy + ":" + offset_gyz);
+      }
+      else
+      {
+        accel_x = accel_x - offset_acx;
+        accel_y = accel_y - offset_acy;
+        accel_z = accel_z - offset_acz;
+        gyro_x = gyro_x - offset_gyx;
+        gyro_y = gyro_y - offset_gyy;
+        gyro_z = gyro_z - offset_gyz;
+      }
+      if(g_c == 1) loadPreferences(); // Carrega as preferencias
     }
 
   }
