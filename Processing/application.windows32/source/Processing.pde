@@ -4,7 +4,7 @@ import processing.serial.*;
 final float version = 1.4;
 
 // Parametros fixos
-float dt = 0.02; // Passo entre as medicoes (20 ms) (pode variar)
+float dt = 0; // Passo entre as medicoes (20 ms) (pode variar)
 int acu = 0; // Variavel auxiliar para o calculo variavel do dt
 
 final float big_P = 50; // Parametro do filtro de Kalman: define a incerteza
@@ -22,8 +22,9 @@ final int maxSize = 1000; // Quantidade maxima de dados a ser salva
 final int XMAX = 800, // Parametro: Tamanho X da tela
           gap = 10, // Parametro: espacamento geral
           sqrwidth = 400; // Parametro: tamanho do grafico
-          
-String out = "../../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hour(),2)+nf(minute(),2)+nf(second(),2)+".csv";
+String ext = ".csv";
+String out = "../../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hour(),2)+nf(minute(),2)+nf(second(),2);
+
 // Fim dos parametros fixos
 
 class displacement
@@ -117,6 +118,7 @@ int vSize = 400; // Quantidade de dados a ser salva
 
 float dadox[] = new float[maxSize], dadoy[] = new float[maxSize], dadoz[] = new float[maxSize]; // Dados a serem mostrados no grafico
 float f_dadox[] = new float[maxSize], f_dadoy[] = new float[maxSize], f_dadoz[] = new float[maxSize]; // Dados a serem filtrados
+float tempo[] = new float[maxSize]; // Vetor tempo
 int c = 0; // Contador
 
 Obj_Kalman k_x, k_y, k_z; // Variaveis que serao submetidas ao filtro Kalman (rotacao)
@@ -172,7 +174,7 @@ float scx, scy, scz; // Escala para plot (2g, 4g, 8g, 16g, 250º/s, 500º/s, 100
 void setup() // Inicializacao do programa
 {
   if(getFolder().equals("Processing"))
-    out = "../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hour(),2)+nf(minute(),2)+nf(second(),2)+".csv";
+    out = "../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hour(),2)+nf(minute(),2)+nf(second(),2);
   size(800, 600, P2D); // Gerando uma tela 800x600 com renderizacao 2D melhorada
   if(Serial.list().length == 0)
     return;
@@ -191,7 +193,7 @@ void setup() // Inicializacao do programa
   gy_unit = cp5.addDropdownList("grau/s", 270, 315, 100, 84); // Insercao da lista gy_unit
   scale = cp5.addDropdownList("1x", XMAX/2 + 50, 2*gap + sqrwidth, 100, 84); // Insercao da lista scale
   sample = cp5.addDropdownList("400 (padrao)", XMAX/2 + 255, 2*gap + sqrwidth, 100, 84); // Insercao da lista sample
-  savemode = cp5.addDropdownList("Salvar uma vez", 120, 15, 120, 84); // Insercao da lista savemode
+  savemode = cp5.addDropdownList("*.csv", 120, 15, 120, 84); // Insercao da lista savemode
   qtd = cp5.addDropdownList("3", 340, 140, 30, 84); // Insercao da lista qtd
   
   ddl_standard(axismode, "Modo YT:Modo XY"); // Cria a lista axismode
@@ -203,7 +205,7 @@ void setup() // Inicializacao do programa
   ddl_standard(valorx, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valorx
   ddl_standard(valory, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valory
   ddl_standard(valorz, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valorz
-  ddl_standard(savemode, "Salvar uma vez:Sobrepor arquivo:Salvar continuamente"); // Cria a lista savemode
+  ddl_standard(savemode, "*.csv:*.dat:*.txt"); // Cria a lista savemode
   ddl_standard(qtd, "3:2:1"); // Cria a lista qtd
   
   cb_save = cb_standard("Salvar arquivo?", 10, 10); // Cria o CheckBox cb_save
@@ -230,7 +232,9 @@ void setup() // Inicializacao do programa
   d_y = new displacement();
   d_z = new displacement();
   
-  if(int(savemode.getValue()) == 1)
+  tempo[0] = 0;
+  
+  if((int)cb_save.getArrayValue()[0] == 1)
     create_file();
 }
 
@@ -250,14 +254,6 @@ void draw() // Rotina em repeticao permanente
   
   text("v" + nf(version, 1, 0), XMAX-50, 580); 
   
-  ang_x = k_x.kalman_step(gyro_x/*, ang_x*/); // Filtro de Kalman para selecionar o angulo
-  ang_y = k_y.kalman_step(gyro_y/*, ang_y*/); // Filtro de Kalman para selecionar o angulo
-  ang_z = k_z.kalman_step(gyro_z/*, ang_z*/); // Filtro de Kalman para selecionar o angulo
-  
-  //dis_x = d_x.step_x(ang_x); // (AINDA NAO IMPLEMENTADO)
-  //dis_y = d_y.step_y(ang_y); // (AINDA NAO IMPLEMENTADO)
-  //dis_z = d_z.step_z(ang_z); // (AINDA NAO IMPLEMENTADO)
-  
   text(int(scx / (1 + mode_scale)), 350, 20);
   text(int(-scx / (1 + mode_scale)), 350, 410);
   if((int)cb_hide.getArrayValue()[0] == 0)
@@ -272,86 +268,7 @@ void draw() // Rotina em repeticao permanente
     text("Angulo y (yaw)  :" + nf(ang_y, 1, 2) + "º", 10, 570); // Imprimindo o valor do angulo na tela
     text("Angulo z (roll) : " + nf(ang_z, 1, 2) + "º", 10, 590); // Imprimindo o valor do angulo na tela
   }
-  
-  switch(int(sample.getValue())) // Selecao de quantidade de dados gravados por ciclo
-  {
-    case 0:
-      vSize = 400;
-      break;
-    case 1:
-      vSize = 50;
-      break;
-    case 2:
-      vSize = 100;
-      break;
-    case 3:
-      vSize = 200;
-      break;
-    case 4:
-      vSize = 250;
-      break;
-    case 5:
-      vSize = 500;
-      break;
-    case 6:
-      vSize = 750;
-      break;
-    case 7:
-      vSize = 1000;
-      break;
-  }
-
-  c++; // Contando em qual execucao esta
-  if(c == vSize) // Se o programa encontra-se no valor maximo de dados que se pode salvar
-  {
-    c = 0; // Sobrescreve o dado mais antigo
-    // Salvando o Arquivo
-    if((int)cb_save.getArrayValue()[0] == 1)
-    {
-      switch(int(savemode.getValue()))
-      {
-        case 0:
-          cb_save.toggle(0);
-        case 1:
-          writecsv(0, f_dadox, f_dadoy, f_dadoz, out);
-          break;
-          case 2:
-          String doc[] = loadStrings(out);
-          if(doc.length == 1)
-            writecsv(0, f_dadox, f_dadoy, f_dadoz, out);
-          else
-            writecsv(1, f_dadox, f_dadoy, f_dadoz, out);
-          
-      }
-    }
-  }
-  
-  
-  
-  if(mode_x != int(valorx.getValue()) || 
-     mode_y != int(valory.getValue()) || 
-     mode_z != int(valorz.getValue()) || 
-     mode_xy != int(axismode.getValue()) || 
-     mode_sample != int(sample.getValue()) || 
-     mode_scale != int(scale.getValue())) // Se o grafico for alterado
-    for(i=0;i<vSize;i++)
-    {
-      dadox[i] = 0; // Reseta (limpa) eixo X (modo XY) ou o valor 1 (modo YT) do grafico
-      dadoy[i] = 0; // Reseta (limpa) eixo Y (modo XY) ou o valor 2 (modo YT) do grafico
-      dadoz[i] = 0; // Reseta (limpa) o valor 3 (apenas modo YT) do grafico
-      c = 0; // Volta contador ao inicio
-    }
     
-  mode_sample = int(sample.getValue()); // Salvando alteracoes na lista
-  mode_x = int(valorx.getValue()); // Salvando alteracoes na lista
-  mode_y = int(valory.getValue()); // Salvando alteracoes na lista
-  mode_z = int(valorz.getValue()); // Salvando alteracoes na lista
-  mode_scale = int(scale.getValue());  // Salvando alteracoes na lista
-  
-  f_dadox[c] = getdata(int(valorx.getValue()));
-  f_dadoy[c] = getdata(int(valory.getValue()));
-  f_dadoz[c] = getdata(int(valorz.getValue()));
-  
   switch(int(valorx.getValue())) // Selecao de variavel eixo X
   {
     case 0: case 1: case 2:
@@ -432,30 +349,25 @@ void draw() // Rotina em repeticao permanente
           rect(XMAX - (gap + sqrwidth) + sqrwidth*i/vSize - 1, dadox[i] - 1, XMAX - (gap + sqrwidth) + sqrwidth*i/vSize + 1, dadox[i] + 1); // Desenha um "ponto" de tamanho 3x3 pixels
       
       switch(int(qtd.getValue()))
-    {
-      case 0: // Desenha dado 3
-        stroke(0, 0, 255); // Habilita linhas de contorno azuis
-        if(dadoz[i] != 0 && dadoz[i-1] != 0) // Se eles forem validos
-          if(mode_line != 0)
-            line(XMAX - (gap + sqrwidth) + sqrwidth*(i-1)/vSize, dadoz[i-1], XMAX - (gap + sqrwidth) + sqrwidth*i/vSize, dadoz[i]); // Desenha linhas
-          else
-            rect(XMAX - (gap + sqrwidth) + sqrwidth*i/vSize - 1, dadoz[i] - 1, XMAX - (gap + sqrwidth) + sqrwidth*i/vSize + 1, dadoz[i] + 1); // Desenha um "ponto" de tamanho 3x3 pixels  
-          
-      case 1: // Desenha dado 2
-        stroke(0, 255, 0); // Habilita linhas de contorno verdes
-        if(dadoy[i] != 0 && dadoy[i-1] != 0) // Se eles forem validos
-          if(mode_line != 0)
-            line(XMAX - (gap + sqrwidth) + sqrwidth*(i-1)/vSize, dadoy[i-1], XMAX - (gap + sqrwidth) + sqrwidth*i/vSize, dadoy[i]); // Desenha linhas
-          else
-            rect(XMAX - (gap + sqrwidth) + sqrwidth*i/vSize - 1, dadoy[i] - 1, XMAX - (gap + sqrwidth) + sqrwidth*i/vSize + 1, dadoy[i] + 1); // Desenha um "ponto" de tamanho 3x3 pixels
+      {
+        case 0: // Desenha dado 3
+          stroke(0, 0, 255); // Habilita linhas de contorno azuis
+          if(dadoz[i] != 0 && dadoz[i-1] != 0) // Se eles forem validos
+            if(mode_line != 0)
+              line(XMAX - (gap + sqrwidth) + sqrwidth*(i-1)/vSize, dadoz[i-1], XMAX - (gap + sqrwidth) + sqrwidth*i/vSize, dadoz[i]); // Desenha linhas
+            else
+              rect(XMAX - (gap + sqrwidth) + sqrwidth*i/vSize - 1, dadoz[i] - 1, XMAX - (gap + sqrwidth) + sqrwidth*i/vSize + 1, dadoz[i] + 1); // Desenha um "ponto" de tamanho 3x3 pixels  
+            
+        case 1: // Desenha dado 2
+          stroke(0, 255, 0); // Habilita linhas de contorno verdes
+          if(dadoy[i] != 0 && dadoy[i-1] != 0) // Se eles forem validos
+            if(mode_line != 0)
+              line(XMAX - (gap + sqrwidth) + sqrwidth*(i-1)/vSize, dadoy[i-1], XMAX - (gap + sqrwidth) + sqrwidth*i/vSize, dadoy[i]); // Desenha linhas
+            else
+              rect(XMAX - (gap + sqrwidth) + sqrwidth*i/vSize - 1, dadoy[i] - 1, XMAX - (gap + sqrwidth) + sqrwidth*i/vSize + 1, dadoy[i] + 1); // Desenha um "ponto" de tamanho 3x3 pixels
+      }
     }
-      
-
-      
-
-      
-    }
-     stroke(0); // Habilita linhas de contorno pretas
+    stroke(0); // Habilita linhas de contorno pretas
   }
   switch(int(ac_unit.getValue())) // Selecao de unidade do acelerometro
   {
@@ -502,7 +414,7 @@ void draw() // Rotina em repeticao permanente
   {
     text("Unidade:", 270, 230); // Texto informativo
     text("Unidade:", 270, 310); // Texto informativo
-    //text("Delay:" + int(1000*dt) + "ms (" + int(1/dt) + " Hz)", 10, 410); // Imprime mensagem de erro
+    text("Delay:" + int(1000*dt) + "ms (" + int(1/dt) + " Hz)", 10, 410); // Imprime mensagem de erro
     
     if(accel_x == -1.0 && accel_y == -1.0 && accel_z == -1.0 && gyro_x == -1.0 && gyro_y == -1.0 && gyro_z == -1.0 && tmp == 36.53) // Se todos forem iguais ao valor que geralmente representa erro no protocolo I2C de comunicacao
     {
@@ -526,7 +438,91 @@ void draw() // Rotina em repeticao permanente
     }
   }
 }
- 
+
+void math()
+{
+  int i;
+  ang_x = k_x.kalman_step(gyro_x/*, ang_x*/); // Filtro de Kalman para selecionar o angulo
+  ang_y = k_y.kalman_step(gyro_y/*, ang_y*/); // Filtro de Kalman para selecionar o angulo
+  ang_z = k_z.kalman_step(gyro_z/*, ang_z*/); // Filtro de Kalman para selecionar o angulo
+  
+  //dis_x = d_x.step_x(ang_x); // (AINDA NAO IMPLEMENTADO)
+  //dis_y = d_y.step_y(ang_y); // (AINDA NAO IMPLEMENTADO)
+  //dis_z = d_z.step_z(ang_z); // (AINDA NAO IMPLEMENTADO)
+  switch(int(sample.getValue())) // Selecao de quantidade de dados gravados por ciclo
+  {
+    case 0:
+      vSize = 400;
+      break;
+    case 1:
+      vSize = 50;
+      break;
+    case 2:
+      vSize = 100;
+      break;
+    case 3:
+      vSize = 200;
+      break;
+    case 4:
+      vSize = 250;
+      break;
+    case 5:
+      vSize = 500;
+      break;
+    case 6:
+      vSize = 750;
+      break;
+    case 7:
+      vSize = 1000;
+      break;
+  }
+
+  c++; // Contando em qual execucao esta
+  if(c == vSize) // Se o programa encontra-se no valor maximo de dados que se pode salvar
+  {
+    c = 0; // Sobrescreve o dado mais antigo
+    // Salvando o Arquivo
+    if((int)cb_save.getArrayValue()[0] == 1)
+    {
+      if(int(savemode.getValue()) == 0) ext = ".csv";
+      if(int(savemode.getValue()) == 1) ext = ".dat";
+      if(int(savemode.getValue()) == 2) ext = ".txt";
+      String doc[] = loadStrings(out+ext);
+        if(doc.length == 1)
+          writecsv(0, f_dadox, f_dadoy, f_dadoz, tempo, out, ext);
+        else
+          writecsv(1, f_dadox, f_dadoy, f_dadoz, tempo, out, ext);
+    }
+    tempo[0] = tempo[vSize - 1] + dt;
+  }
+    
+  if(mode_x != int(valorx.getValue()) || 
+     mode_y != int(valory.getValue()) || 
+     mode_z != int(valorz.getValue()) || 
+     mode_xy != int(axismode.getValue()) || 
+     mode_sample != int(sample.getValue()) || 
+     mode_scale != int(scale.getValue())) // Se o grafico for alterado
+    for(i=0;i<vSize;i++)
+    {
+      dadox[i] = 0; // Reseta (limpa) eixo X (modo XY) ou o valor 1 (modo YT) do grafico
+      dadoy[i] = 0; // Reseta (limpa) eixo Y (modo XY) ou o valor 2 (modo YT) do grafico
+      dadoz[i] = 0; // Reseta (limpa) o valor 3 (apenas modo YT) do grafico
+      tempo[i] = 0; // Reseta (limpa) o valor temporal
+      c = 0; // Volta contador ao inicio
+    }
+    
+  mode_sample = int(sample.getValue()); // Salvando alteracoes na lista
+  mode_x = int(valorx.getValue()); // Salvando alteracoes na lista
+  mode_y = int(valory.getValue()); // Salvando alteracoes na lista
+  mode_z = int(valorz.getValue()); // Salvando alteracoes na lista
+  mode_scale = int(scale.getValue());  // Salvando alteracoes na lista
+
+  f_dadox[c] = getdata(int(valorx.getValue()));
+  f_dadoy[c] = getdata(int(valory.getValue()));
+  f_dadoz[c] = getdata(int(valorz.getValue()));
+  if(c != 0) tempo[c] = tempo[c-1] + dt;
+}
+
 /*void keyReleased() // Evento que ocorre toda vez que uma tecla for pressionada
 {
   d1 = gettext(1);
@@ -604,7 +600,7 @@ void loadPreferences()
   d2 = gettext(2);
   d3 = gettext(3);
   d4 = gettext(4);*/
-  rename(savemode,"Salvar uma vez:Sobrepor arquivo:Salvar continuamente",decode(st[1])[0]);
+  rename(savemode,"*.csv:*.dat:*.txt",decode(st[1])[0]);
   rename(axismode,"Modo YT:Modo XY",decode(st[3])[0]);
   rename(fillmode,"Pontos:Linhas",decode(st[4])[0]);
   rename(valorx,"Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z",decode(st[5])[0]);
@@ -615,7 +611,7 @@ void loadPreferences()
   rename(gy_unit,"grau/s:rad/s",decode(st[10])[0]);
   rename(scale,"1x:2x:3x:4x:5x:6x:7x:8x:9x:10x",decode(st[11])[0]);
   rename(sample,"400 (padrao):50:100:200:250:500:750:1000",decode(st[12])[0]);
-  if(int(savemode.getValue()) == 1)
+  if((int)cb_save.getArrayValue()[0] == 1)
     create_file();
 }
 void rename(DropdownList d, String s, float index)
@@ -697,7 +693,7 @@ void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na po
         offset_gyx += 0.1 * gyro_x;
         offset_gyy += 0.1 * gyro_y;
         offset_gyz += 0.1 * gyro_z;
-        println(offset_acx + ":" + offset_acy + ":" + offset_acz + ":" + offset_gyx + ":" + offset_gyy + ":" + offset_gyz);
+        //println(offset_acx + ":" + offset_acy + ":" + offset_acz + ":" + offset_gyx + ":" + offset_gyy + ":" + offset_gyz);
       }
       else
       {
@@ -709,6 +705,7 @@ void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na po
         gyro_z = gyro_z - offset_gyz;
       }
       if(g_c == 1) loadPreferences(); // Carrega as preferencias
+      math(); // Executa os parametros matematicos do programa
     }
 
   }
@@ -827,45 +824,105 @@ float rot(float x, float y, float z, float a, float b, float c, int resp)
   }
 }
 
-void writecsv(int rFlag, float data1[], float data2[], float data3[], String fname)
+void writecsv(int rFlag, float data1[], float data2[], float data3[], float data4[], String fname, String ext)
 {
   Table tbl = new Table();
-  if(rFlag == 0)
+  String f = fname+ext;
+  int q, i;
+  if(int(axismode.getValue()) == 0)
+    q = int(qtd.getValue());
+  else
+    q = 1;
+  if(ext.equals(".csv"))
   {
-    tbl = new Table();
-    tbl.setString(0,0,"sep=");
-    switch(int(qtd.getValue()))
+    if(rFlag == 0)
     {
-      case 0:
-        tbl.setString(1,2,valorz.getLabel());      
-      case 1:
-        tbl.setString(1,1,valory.getLabel());
-      case 2:
-        tbl.setString(1,0,valorx.getLabel());
+      tbl = new Table();
+      tbl.setString(0,0,"sep=");
+      switch(q)
+      {
+        case 0:
+          tbl.setString(1,2,valorz.getLabel());      
+        case 1:
+          tbl.setString(1,1,valory.getLabel());
+        case 2:
+          tbl.setString(1,0,valorx.getLabel());
+        default:
+          tbl.setString(1,3-q,"Tempo");
+      }
     }
+    else
+      tbl = loadTable(f);
+    
+    TableRow line;
+    for(i=0;i<vSize;i++)
+    {
+      line = tbl.addRow();
+      switch(q)
+      {
+        case 0:
+          line.setFloat(2, data3[i]);
+        case 1:
+          line.setFloat(1, data2[i]);
+        case 2:
+          line.setFloat(0, data1[i]);
+        default:
+          line.setFloat(3-q, data4[i]);
+      }
+    }
+    saveTable(tbl, f);
+    
+    String lines[] = loadStrings(f);
+    lines[0] = "sep=,";
+    saveStrings(f, lines);
   }
   else
-    tbl = loadTable(fname);
-  
-  TableRow line;
-  for(int i=0;i<vSize;i++)
   {
-    line = tbl.addRow();
-    switch(int(qtd.getValue()))
+    if(rFlag == 0)
     {
-      case 0:
-        line.setFloat(2, data3[i]);
-      case 1:
-        line.setFloat(1, data2[i]);
-      case 2:
-        line.setFloat(0, data1[i]);
+      String newdoc[] = new String[vSize];
+      for(i=0;i<vSize;i++)
+      {
+        switch(q)
+        {
+          case 0:
+            newdoc[i] = nf(data1[i]) + '\t' + nf(data2[i]) + '\t' + nf(data3[i]) + '\t' + nf(data4[i]);
+            break;
+          case 1:
+            newdoc[i] = nf(data1[i]) + '\t' + nf(data2[i])+ '\t' + nf(data4[i]);
+            break;
+          case 2:
+            newdoc[i] = nf(data1[i]) + '\t' + nf(data4[i]);
+            break;
+        }
+      }
+      saveStrings(f, newdoc);
     }
+    else
+    {
+      String olddoc[] = loadStrings(f);
+      String newdoc[] = new String[olddoc.length + vSize];
+      for(i=0;i<olddoc.length;i++)
+        newdoc[i] = olddoc[i];
+      for(i=0;i<vSize;i++)
+      {
+        switch(q)
+        {
+          case 0:
+            newdoc[olddoc.length + i] = nf(data1[i]) + '\t' + nf(data2[i]) + '\t' + nf(data3[i]) + '\t' + nf(data4[i]);
+            break;
+          case 1:
+            newdoc[olddoc.length + i] = nf(data1[i]) + '\t' + nf(data2[i])+ '\t' + nf(data4[i]);
+            break;
+          case 2:
+            newdoc[olddoc.length + i] = nf(data1[i]) + '\t' + nf(data4[i]);
+            break;
+        }
+      }
+      saveStrings(f, newdoc);
+    }
+    
   }
-  saveTable(tbl, fname);
-  
-  String lines[] = loadStrings(fname);
-  lines[0] = "sep=,";
-  saveStrings(fname, lines);
 }
 
 String getFolder()
@@ -898,11 +955,14 @@ float gettext(int val)
 }
 
 void create_file()
-{  
-  out = "../../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hour(),2)+nf(minute(),2)+nf(second(),2)+".csv";
+{
+  if(int(savemode.getValue()) == 0) ext = ".csv";
+  if(int(savemode.getValue()) == 1) ext = ".dat";
+  if(int(savemode.getValue()) == 2) ext = ".txt";
+  out = "../../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hour(),2)+nf(minute(),2)+nf(second(),2);
   if(getFolder().equals("Processing"))
-    out = "../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hour(),2)+nf(minute(),2)+nf(second(),2)+".csv";
+    out = "../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hour(),2)+nf(minute(),2)+nf(second(),2);
   String tbl[] = new String[1]; // Inicializando arquivo de output ao inicializar o programa
   tbl[0] = "x"; // Preenchendo a primeira linha com qualquer coisa para sobrescrever qualquer arquivo que possa existir
-  saveStrings(out, tbl); // Salvando arquivo sob o nome de output_[data]_[hora].csv
+  saveStrings(out+ext, tbl); // Salvando arquivo sob o nome de output_[data]_[hora].csv
 }

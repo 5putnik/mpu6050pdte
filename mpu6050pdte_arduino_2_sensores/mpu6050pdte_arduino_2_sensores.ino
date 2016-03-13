@@ -58,6 +58,7 @@ void loop(){
   AcY = AcY1 - AcY2;
   AcZ = AcZ1 - AcZ2;
   
+  // Tmp = Tmp1>Tmp2?Tmp1:Tmp2
   Tmp = Tmp1;
   if(Tmp < Tmp2)
     Tmp = Tmp2;
