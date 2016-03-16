@@ -15,7 +15,8 @@ final float small_R = 0.001; // Parametro do filtro de Kalman: define a velocida
 final float reg_ac = 2, // Faixa do acelerometro: +/- 2g
             reg_gy = 250, // Faixa do giroscopio: +/- 250º/s
             reg_ang = 360, // Faixa do angulo: +/- 360º
-            reg_pos = 100; // Faixa do deslocamento: +/- 10 cm
+            reg_pos = 100, // Faixa do deslocamento: +/- 10 cm
+            reg_vel = 200; // Faixa de velocidade: +/- 20 cm/s
 
 final int maxSize = 1000; // Quantidade maxima de dados a ser salva
 
@@ -26,6 +27,31 @@ String ext = ".csv";
 String out = "../../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hour(),2)+nf(minute(),2)+nf(second(),2);
 
 // Fim dos parametros fixos
+
+class linear
+{
+  float d, // Valor calculado
+        read; // Valor lido
+  
+  linear()
+  {
+    this.d = 0;
+  }
+  
+  float step_vel(float read)
+  {
+    this.read = 0.96 * read + 0.04 * this.read;
+    this.d += dt * this.read;
+    return d;
+  }
+  
+  float step_dis(float read)
+  {
+    this.read = 0.96 * read + 0.04 * this.read;
+    this.d += 0.5 * dt * dt * this.read;
+    return d;
+  }
+}
 
 class displacement
 {
@@ -123,11 +149,14 @@ int c = 0; // Contador
 
 Obj_Kalman k_x, k_y, k_z; // Variaveis que serao submetidas ao filtro Kalman (rotacao)
 
-displacement d_x, d_y, d_z; // Variaveis que serao submetidas ao filtro Kalman (translacao)
+linear d_x, d_y, d_z, v_x, v_y, v_z; // Variaveis que serao submetidas ao filtro Kalman (translacao)
 
 float ang_x = 0, // Valor Angulo X em graus
       ang_y = 0, // Valor Angulo Y em graus
       ang_z = 0, // Valor Angulo Z em graus
+      vel_x = 0,
+      vel_y = 0,
+      vel_z = 0,
       dis_x = 0, // Distancia no eixo X (abertura)
       dis_y = 0, // Distancia no eixo Y (desvio)
       dis_z = 0; // Distancia no eixo Z (protracao)
@@ -202,9 +231,9 @@ void setup() // Inicializacao do programa
   ddl_standard(sample, "400 (padrao):50:100:200:250:500:750:1000"); // Cria a lista filter
   ddl_standard(ac_unit, "m/s^2:g"); // Cria a lista ac_unit
   ddl_standard(gy_unit, "grau/s:rad/s"); // Cria a lista gy_unit
-  ddl_standard(valorx, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valorx
-  ddl_standard(valory, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valory
-  ddl_standard(valorz, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valorz
+  ddl_standard(valorx, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z"); // Cria a lista valorx
+  ddl_standard(valory, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z"); // Cria a lista valory
+  ddl_standard(valorz, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z"); // Cria a lista valorz
   ddl_standard(savemode, "*.csv:*.dat:*.txt"); // Cria a lista savemode
   ddl_standard(qtd, "3:2:1"); // Cria a lista qtd
   
@@ -228,9 +257,13 @@ void setup() // Inicializacao do programa
   k_y = new Obj_Kalman(small_Qt, small_Qtb, small_R, big_P, 0, 0, big_P, 0, 0);
   k_z = new Obj_Kalman(small_Qt, small_Qtb, small_R, big_P, 0, 0, big_P, 0, 0);
   
-  d_x = new displacement();
-  d_y = new displacement();
-  d_z = new displacement();
+  d_x = new linear();
+  d_y = new linear();
+  d_z = new linear();
+  
+  v_x = new linear();
+  v_y = new linear();
+  v_z = new linear();
   
   tempo[0] = 0;
   
@@ -446,9 +479,14 @@ void math()
   ang_y = k_y.kalman_step(gyro_y/*, ang_y*/); // Filtro de Kalman para selecionar o angulo
   ang_z = k_z.kalman_step(gyro_z/*, ang_z*/); // Filtro de Kalman para selecionar o angulo
   
-  //dis_x = d_x.step_x(ang_x); // (AINDA NAO IMPLEMENTADO)
-  //dis_y = d_y.step_y(ang_y); // (AINDA NAO IMPLEMENTADO)
-  //dis_z = d_z.step_z(ang_z); // (AINDA NAO IMPLEMENTADO)
+  dis_x = d_x.step_dis(accel_x);
+  dis_y = d_y.step_dis(accel_y);
+  dis_z = d_z.step_dis(accel_z);
+ 
+  vel_x = v_x.step_vel(accel_x);
+  vel_y = v_y.step_vel(accel_y);
+  vel_z = v_z.step_vel(accel_z);
+  
   switch(int(sample.getValue())) // Selecao de quantidade de dados gravados por ciclo
   {
     case 0:
@@ -798,6 +836,12 @@ float getdata(int val)
       return dis_y;
     case 11:
       return dis_z;
+    case 12:
+      return vel_x;
+    case 13:
+      return vel_y;
+    case 14:
+      return vel_z;
     default:
       return -1.0;
   }
