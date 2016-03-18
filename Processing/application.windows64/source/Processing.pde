@@ -15,7 +15,8 @@ final float small_R = 0.001; // Parametro do filtro de Kalman: define a velocida
 final float reg_ac = 2, // Faixa do acelerometro: +/- 2g
             reg_gy = 250, // Faixa do giroscopio: +/- 250º/s
             reg_ang = 360, // Faixa do angulo: +/- 360º
-            reg_pos = 100; // Faixa do deslocamento: +/- 10 cm
+            reg_pos = 100, // Faixa do deslocamento: +/- 100 cm
+            reg_vel = 20; // Faixa de velocidade: +/- 20 cm/s
 
 final int maxSize = 1000; // Quantidade maxima de dados a ser salva
 
@@ -27,31 +28,31 @@ String out = "../../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hou
 
 // Fim dos parametros fixos
 
-class displacement
+class linear
 {
-  float x;
+  float d, // Valor calculado
+        read; // Valor lido
   
-  displacement()
+  linear()
   {
-    this.x = 0;
+    this.d = 0;
   }
   
-  float step_x(float read)
+  float step_vel(float read)
   {
-    float r = 10 * sqrt(d1*d1 + d2*d2 - 2*d1*d2*cos((d3*PI/180))); // Lei dos cossenos. "360 - d3" pois o angulo indicado representa o suplementar. "*PI/180" para converter de graus para radianos
-    this.x = -(read * PI / 180) * r; // Convertendo o valor de graus para radianos. Valor negativo pois a mandibula abre para baixo
-    return this.x;
+    this.read = 0.96 * read + 0.04 * this.read;
+    this.d += 100 * 9.81 * dt * this.read; // 100 pois leitura em centimetro
+    return d;
   }
   
-  float step_y(float read)
+  float step_dis(float read)
   {
-    float ang = ((d3 - 90)/2)*PI/180;
-    float f = d2*cos(ang) + d1*sin((d3*PI/180));
-    float r = 10 * sqrt(d4*d4/4 + f*f); // Teorema de Pitagoras para um triangulo de base "d4/2" e altura "f"
-    this.x = (read * PI / 180) * r; // Convertendo o valor de graus para radianos. Valor negativo pois a mandibula abre para baixo
-    return this.x;
+    this.read = 0.96 * read + 0.04 * this.read;
+    this.d += 0.5 * 100 * 9.81 * dt * dt * this.read; // 100 pois leitura em centimetro
+    return d;
   }
 }
+
 class Obj_Kalman
 {
   float Qt,
@@ -64,7 +65,7 @@ class Obj_Kalman
         bias,
         ang;
 
-  Obj_Kalman(float Qt, float Qtb, float R, float P00, float P01, float P10, float P11, float bias, float ang) // Definindo a estrutura de dados do filtro de Kalman
+  Obj_Kalman(float Qt, float Qtb, float R, float P00, float P01, float P10, float P11,float bias, float ang) // Definindo a estrutura de dados do filtro de Kalman
   {
     this.Qt = Qt;
     this.Qtb = Qtb;
@@ -123,11 +124,14 @@ int c = 0; // Contador
 
 Obj_Kalman k_x, k_y, k_z; // Variaveis que serao submetidas ao filtro Kalman (rotacao)
 
-displacement d_x, d_y, d_z; // Variaveis que serao submetidas ao filtro Kalman (translacao)
+linear d_x, d_y, d_z, v_x, v_y, v_z; // Variaveis que serao submetidas ao filtro Kalman (translacao)
 
 float ang_x = 0, // Valor Angulo X em graus
       ang_y = 0, // Valor Angulo Y em graus
       ang_z = 0, // Valor Angulo Z em graus
+      vel_x = 0,
+      vel_y = 0,
+      vel_z = 0,
       dis_x = 0, // Distancia no eixo X (abertura)
       dis_y = 0, // Distancia no eixo Y (desvio)
       dis_z = 0; // Distancia no eixo Z (protracao)
@@ -202,9 +206,9 @@ void setup() // Inicializacao do programa
   ddl_standard(sample, "400 (padrao):50:100:200:250:500:750:1000"); // Cria a lista filter
   ddl_standard(ac_unit, "m/s^2:g"); // Cria a lista ac_unit
   ddl_standard(gy_unit, "grau/s:rad/s"); // Cria a lista gy_unit
-  ddl_standard(valorx, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valorx
-  ddl_standard(valory, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valory
-  ddl_standard(valorz, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z"); // Cria a lista valorz
+  ddl_standard(valorx, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z"); // Cria a lista valorx
+  ddl_standard(valory, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z"); // Cria a lista valory
+  ddl_standard(valorz, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z"); // Cria a lista valorz
   ddl_standard(savemode, "*.csv:*.dat:*.txt"); // Cria a lista savemode
   ddl_standard(qtd, "3:2:1"); // Cria a lista qtd
   
@@ -228,9 +232,13 @@ void setup() // Inicializacao do programa
   k_y = new Obj_Kalman(small_Qt, small_Qtb, small_R, big_P, 0, 0, big_P, 0, 0);
   k_z = new Obj_Kalman(small_Qt, small_Qtb, small_R, big_P, 0, 0, big_P, 0, 0);
   
-  d_x = new displacement();
-  d_y = new displacement();
-  d_z = new displacement();
+  d_x = new linear();
+  d_y = new linear();
+  d_z = new linear();
+  
+  v_x = new linear();
+  v_y = new linear();
+  v_z = new linear();
   
   tempo[0] = 0;
   
@@ -250,12 +258,31 @@ void draw() // Rotina em repeticao permanente
   background(255, 255, 255); // Tela de fundo branca
   textFont(f, 16); // Fonte tamanho 16
   rectMode(CORNERS); // Modo de desenho dos retangulos como CORNERS
-  int i; // Variavel geral de laco 
+  int i, j; // Variavel geral de laco 
   
   text("v" + nf(version, 1, 0), XMAX-50, 580); 
-  
-  text(int(scx / (1 + mode_scale)), 350, 20);
-  text(int(-scx / (1 + mode_scale)), 350, 410);
+  if(c < int(vSize/3))
+  {
+    fill(255,0,0);
+    text(nf(scx / (1 + mode_scale),0,2), 340, 20);
+    text(nf(-scx / (1 + mode_scale),0,2), 335, 410);
+  }
+  else
+  {
+    if(c > 2 * int(vSize/3))
+    {
+      fill(0,0,255);
+      text(nf(scz / (1 + mode_scale),0,2), 340, 20);
+      text(nf(-scz / (1 + mode_scale),0,2), 335, 410);
+    }
+    else
+    {
+      fill(0,255,0);
+      text(nf(scy / (1 + mode_scale),0,2), 340, 20);
+      text(nf(-scy / (1 + mode_scale),0,2), 335, 410);
+    }
+  }
+  fill(0);
   if((int)cb_hide.getArrayValue()[0] == 0)
   {
     /*text("Abertura: " + int(dis_x) + " mm", 10, 410);
@@ -282,6 +309,8 @@ void draw() // Rotina em repeticao permanente
       break;
     case 9: case 10: case 11:
       scx = reg_pos;
+    case 12: case 13: case 14:
+      scx = reg_vel;
   }
   switch(int(valory.getValue())) // Selecao de variavel eixo Y
   {
@@ -296,6 +325,8 @@ void draw() // Rotina em repeticao permanente
       break;
     case 9: case 10: case 11:
       scy = reg_pos;
+    case 12: case 13: case 14:
+      scy = reg_vel;
   }
   
   switch(int(valorz.getValue())) // Selecao de variavel 3
@@ -310,7 +341,9 @@ void draw() // Rotina em repeticao permanente
       scz = reg_ang;
       break;
     case 9: case 10: case 11:
-      scz = reg_pos;    
+      scz = reg_pos;
+    case 12: case 13: case 14:
+      scz = reg_vel;    
   }
   
   noFill(); // Desabilita preenchimento
@@ -320,10 +353,10 @@ void draw() // Rotina em repeticao permanente
   mode_xy = int(axismode.getValue()); // Le lista axismode
   mode_line = int(fillmode.getValue()); // Le lista fillmode
   
-  dadoy[c] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadoy[c] * sqrwidth/2) / scy; // Dados de plot do eixo y
+  for(j=0;j<c;j++) dadoy[j] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadoy[j] * sqrwidth/2) / scy; // Dados de plot do eixo y
   if(mode_xy != 0)
   {
-    dadox[c] = XMAX - (gap + sqrwidth/2) + (1 + mode_scale)*(f_dadox[c] * sqrwidth/2) / scx; // Dados de plot do eixo x
+    for(j=0;j<c;j++) dadox[j] = XMAX - (gap + sqrwidth/2) + (1 + mode_scale)*(f_dadox[j] * sqrwidth/2) / scx; // Dados de plot do eixo x
     line(XMAX - (gap + sqrwidth/2), gap, XMAX - (gap + sqrwidth/2), sqrwidth + gap); // Eixo Y do plano cartesiano
     fill(0, 255, 0); // Preenche proximos desenhos de verde
     stroke(0, 255, 0); // Habilita linhas de contorno verdes
@@ -337,8 +370,8 @@ void draw() // Rotina em repeticao permanente
   }
   else
   {
-    dadox[c] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadox[c] * sqrwidth/2) / scx; // Dados de plot 1
-    dadoz[c] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadoz[c] * sqrwidth/2) / scz; // Dados de plot 3
+    for(j=0;j<c;j++) dadox[j] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadox[j] * sqrwidth/2) / scx; // Dados de plot 1
+    for(j=0;j<c;j++) dadoz[j] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadoz[j] * sqrwidth/2) / scz; // Dados de plot 3
     for(i=1;i<vSize;i++)
     {
       stroke(255, 0, 0); // Habilita linhas de contorno vermelhos
@@ -446,9 +479,14 @@ void math()
   ang_y = k_y.kalman_step(gyro_y/*, ang_y*/); // Filtro de Kalman para selecionar o angulo
   ang_z = k_z.kalman_step(gyro_z/*, ang_z*/); // Filtro de Kalman para selecionar o angulo
   
-  //dis_x = d_x.step_x(ang_x); // (AINDA NAO IMPLEMENTADO)
-  //dis_y = d_y.step_y(ang_y); // (AINDA NAO IMPLEMENTADO)
-  //dis_z = d_z.step_z(ang_z); // (AINDA NAO IMPLEMENTADO)
+  dis_x = d_x.step_dis(accel_x);
+  dis_y = d_y.step_dis(accel_y);
+  dis_z = d_z.step_dis(accel_z);
+ 
+  vel_x = v_x.step_vel(accel_x);
+  vel_y = v_y.step_vel(accel_y);
+  vel_z = v_z.step_vel(accel_z);
+  
   switch(int(sample.getValue())) // Selecao de quantidade de dados gravados por ciclo
   {
     case 0:
@@ -553,11 +591,23 @@ public void controlEvent(ControlEvent ev)
     g_c = 0;
     c = 0;
     k_x.ang = 0;
+    k_x.bias = 0;
     k_y.ang = 0;
+    k_y.bias = 0;
     k_z.ang = 0;
-    d_x.x = 0;
-    d_y.x = 0;
-    d_z.x = 0;
+    k_z.bias = 0;
+    d_x.d = 0;
+    d_x.read = 0;
+    d_y.d = 0;
+    d_y.read = 0;
+    d_z.d = 0;
+    d_z.read = 0;
+    v_x.d = 0;
+    v_x.read = 0;
+    v_y.d = 0;
+    v_y.read = 0;
+    v_z.d = 0;
+    v_z.read = 0;
     offset_acx = 0; // Valor de offset
     offset_acy = 0; // Valor de offset
     offset_acz = 0; // Valor de offset
@@ -603,9 +653,9 @@ void loadPreferences()
   rename(savemode,"*.csv:*.dat:*.txt",decode(st[1])[0]);
   rename(axismode,"Modo YT:Modo XY",decode(st[3])[0]);
   rename(fillmode,"Pontos:Linhas",decode(st[4])[0]);
-  rename(valorx,"Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z",decode(st[5])[0]);
-  rename(valory,"Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z",decode(st[6])[0]);
-  rename(valorz,"Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z",decode(st[7])[0]);
+  rename(valorx,"Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z",decode(st[5])[0]);
+  rename(valory,"Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z",decode(st[6])[0]);
+  rename(valorz,"Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z",decode(st[7])[0]);
   rename(qtd,"3:2:1",decode(st[8])[0]);
   rename(ac_unit,"m/s^2:g",decode(st[9])[0]);
   rename(gy_unit,"grau/s:rad/s",decode(st[10])[0]);
@@ -798,6 +848,12 @@ float getdata(int val)
       return dis_y;
     case 11:
       return dis_z;
+    case 12:
+      return vel_x;
+    case 13:
+      return vel_y;
+    case 14:
+      return vel_z;
     default:
       return -1.0;
   }

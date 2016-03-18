@@ -1,6 +1,6 @@
 saveFile=0.0
 saveMode=0.0
-hideText=1.0
+hideText=0.0
 axisMode=0.0
 fillMode=1.0
 val1=6.0
@@ -9,8 +9,8 @@ val3=8.0
 valNum=0.0
 unitAcc=0.0
 unitGyr=0.0
-scaleMode=0.0
-sampleRate=1.0
+scaleMode=4.0
+sampleRate=0.0
 null
 null
 null
