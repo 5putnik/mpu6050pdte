@@ -50,24 +50,30 @@ String out = "../../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hou
 class linear
 {
   float d, // Valor calculado
+        aux, // Valor auxiliar
         read; // Valor lido
+  final float sens_d = 0.96f,
+              sens_v = 0.96f;
   
   linear()
   {
     this.d = 0;
+    this.aux = 0;
+    this.read = 0;
   }
   
   public float step_vel(float read)
   {
-    this.read = 0.96f * read + 0.04f * this.read;
-    this.d += 100 * 9.81f * dt * this.read; // 100 pois leitura em centimetro
+    this.read = sens_v * read + (1 - sens_v) * this.read;
+    this.d += 100 * 9.81f * dt * this.read; // 100 pois leitura em cm/s
     return d;
   }
   
   public float step_dis(float read)
   {
-    this.read = 0.96f * read + 0.04f * this.read;
-    this.d += 0.5f * 100 * 9.81f * dt * dt * this.read; // 100 pois leitura em centimetro
+    this.read = sens_d * read + (1 - sens_d) * this.read;
+    this.aux += dt * this.read;
+    this.d += 100 * 9.81f * (dt * this.aux + 0.5f * dt * dt * this.read); // 100 pois leitura em cm
     return d;
   }
 }
@@ -303,13 +309,13 @@ public void draw() // Rotina em repeticao permanente
   }
   fill(0);
   if((int)cb_hide.getArrayValue()[0] == 0)
-  {
-    /*text("Abertura: " + int(dis_x) + " mm", 10, 410);
-    text("Desvio: " + int(dis_y) + " mm", 10, 430);*/
-    
-    text("Drifting x: " + nf(k_x.bias, 1, 2) + "\u00ba/s", 10, 470); // Imprimindo o valor da gravidade na tela
-    text("Drifting y: " + nf(k_y.bias, 1, 2) + "\u00ba/s", 10, 490); // Imprimindo o valor da gravidade na tela
-    text("Drifting z: " + nf(k_z.bias, 1, 2) + "\u00ba/s", 10, 510); // Imprimindo o valor da gravidade na tela
+  {   
+    text("Velocidade x: " + nf(v_x.d, 1, 2) + "cm/s", 10, 430); // Imprimindo o valor da velocidade linear na tela
+    text("Velocidade y: " + nf(v_y.d, 1, 2) + "cm/s", 10, 450); // Imprimindo o valor da velocidade linear na tela
+    text("Velocidade z: " + nf(v_z.d, 1, 2) + "cm/s", 10, 470); // Imprimindo o valor da velocidade linear na tela
+    text("Deslocamento x: " + nf(d_x.d, 1, 2) + "cm", 10, 490); // Imprimindo o valor do deslocamento linear na tela
+    text("Deslocamento y: " + nf(d_y.d, 1, 2) + "cm", 10, 510); // Imprimindo o valor do deslocamento linear na tela
+    text("Deslocamento z: " + nf(d_z.d, 1, 2) + "cm", 10, 530); // Imprimindo o valor do deslocamento linear na tela
     text("Angulo x (pitch): " + nf(ang_x, 1, 2) + "\u00ba", 10, 550); // Imprimindo o valor do angulo na tela
     text("Angulo y (yaw)  :" + nf(ang_y, 1, 2) + "\u00ba", 10, 570); // Imprimindo o valor do angulo na tela
     text("Angulo z (roll) : " + nf(ang_z, 1, 2) + "\u00ba", 10, 590); // Imprimindo o valor do angulo na tela
@@ -424,28 +430,28 @@ public void draw() // Rotina em repeticao permanente
   switch(PApplet.parseInt(ac_unit.getValue())) // Selecao de unidade do acelerometro
   {
     case 0:
-      acx = nf(accel_x * grav, 1, 2) + " m/s\u00b2"; // Conversao para valores fisicos (metro por segundo ao quadrado)
-      acy = nf(accel_y * grav, 1, 2) + " m/s\u00b2"; // Conversao para valores fisicos (metro por segundo ao quadrado)
-      acz = nf(accel_z * grav, 1, 2) + " m/s\u00b2"; // Conversao para valores fisicos (metro por segundo ao quadrado)
+      acx = nfs(accel_x * grav, 1, 2) + " m/s\u00b2"; // Conversao para valores fisicos (metro por segundo ao quadrado)
+      acy = nfs(accel_y * grav, 1, 2) + " m/s\u00b2"; // Conversao para valores fisicos (metro por segundo ao quadrado)
+      acz = nfs(accel_z * grav, 1, 2) + " m/s\u00b2"; // Conversao para valores fisicos (metro por segundo ao quadrado)
       break;
     case 1:
-      acx = nf(accel_x, 1, 2) + " g"; // Conversao para valores fisicos (gravidades)
-      acy = nf(accel_y, 1, 2) + " g"; // Conversao para valores fisicos (gravidades)
-      acz = nf(accel_z, 1, 2) + " g"; // Conversao para valores fisicos (gravidades)
+      acx = nfs(accel_x, 1, 2) + " g"; // Conversao para valores fisicos (gravidades)
+      acy = nfs(accel_y, 1, 2) + " g"; // Conversao para valores fisicos (gravidades)
+      acz = nfs(accel_z, 1, 2) + " g"; // Conversao para valores fisicos (gravidades)
       break;
   }
 
   switch(PApplet.parseInt(gy_unit.getValue())) // Selecao de unidade do giroscopio
   {
     case 0:
-      gyx = nf(gyro_x, 1, 2) + " \u00ba/seg"; // Conversao para valores fisicos (graus por segundo)
-      gyy = nf(gyro_y, 1, 2) + " \u00ba/seg"; // Conversao para valores fisicos (graus por segundo)
-      gyz = nf(gyro_z, 1, 2) + " \u00ba/seg"; // Conversao para valores fisicos (graus por segundo)
+      gyx = nfs(gyro_x, 1, 2) + " \u00ba/seg"; // Conversao para valores fisicos (graus por segundo)
+      gyy = nfs(gyro_y, 1, 2) + " \u00ba/seg"; // Conversao para valores fisicos (graus por segundo)
+      gyz = nfs(gyro_z, 1, 2) + " \u00ba/seg"; // Conversao para valores fisicos (graus por segundo)
       break;
     case 1:
-      gyx = nf(gyro_x * PI/180, 1, 2) + " rad/seg"; // Conversao para valores fisicos (radianos por segundo)
-      gyy = nf(gyro_y * PI/180, 1, 2) + " rad/seg"; // Conversao para valores fisicos (radianos por segundo)
-      gyz = nf(gyro_z * PI/180, 1, 2) + " rad/seg"; // Conversao para valores fisicos (radianos por segundo)
+      gyx = nfs(gyro_x * PI/180, 1, 2) + " rad/seg"; // Conversao para valores fisicos (radianos por segundo)
+      gyy = nfs(gyro_y * PI/180, 1, 2) + " rad/seg"; // Conversao para valores fisicos (radianos por segundo)
+      gyz = nfs(gyro_z * PI/180, 1, 2) + " rad/seg"; // Conversao para valores fisicos (radianos por segundo)
       break;
   }
   fill(0); // Preenche proximos desenhos de preto
@@ -616,10 +622,13 @@ public void controlEvent(ControlEvent ev)
     k_z.ang = 0;
     k_z.bias = 0;
     d_x.d = 0;
+    d_x.aux = 0;
     d_x.read = 0;
     d_y.d = 0;
+    d_y.aux = 0;
     d_y.read = 0;
     d_z.d = 0;
+    d_z.aux = 0;
     d_z.read = 0;
     v_x.d = 0;
     v_x.read = 0;
@@ -774,7 +783,8 @@ public void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrit
         gyro_z = gyro_z - offset_gyz;
       }
       if(g_c == 1) loadPreferences(); // Carrega as preferencias
-      math(); // Executa os parametros matematicos do programa
+      if(g_c >= 10) math(); // Executa os parametros matematicos do programa 
+      delay(10);
     }
 
   }
