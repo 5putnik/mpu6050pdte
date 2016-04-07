@@ -20,7 +20,7 @@ public class Processing extends PApplet {
 
 
 
-final float version = 1.4f;
+final float version = 1.5f;
 
 // Parametros fixos
 float dt = 0; // Passo entre as medicoes (20 ms) (pode variar)
@@ -34,8 +34,10 @@ final float small_R = 0.001f; // Parametro do filtro de Kalman: define a velocid
 final float reg_ac = 2, // Faixa do acelerometro: +/- 2g
             reg_gy = 250, // Faixa do giroscopio: +/- 250\u00ba/s
             reg_ang = 360, // Faixa do angulo: +/- 360\u00ba
-            reg_pos = 100, // Faixa do deslocamento: +/- 100 cm
-            reg_vel = 20; // Faixa de velocidade: +/- 20 cm/s
+            reg_pos = 1/9.81f, // Faixa do deslocamento: +/- 100 cm
+            reg_vel = 0.2f/9.81f, // Faixa de velocidade: +/- 20 cm/s
+            reg_ajerk = 400,
+            reg_gjerk = 1.0e+7f; 
 
 final int maxSize = 1000; // Quantidade maxima de dados a ser salva
 
@@ -47,92 +49,77 @@ String out = "../../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hou
 
 // Fim dos parametros fixos
 
-class linear
+class gyroscope
 {
-  float d, // Valor calculado
-        aux, // Valor auxiliar
-        read; // Valor lido
-  final float sens_d = 0.96f,
-              sens_v = 0.96f;
+  float d, // Deslocamento angular
+        v, // Velocidade angular
+        a, // Aceleracao angular
+        j; // Variacao da aceleracao angular ("jerk" angular)
+  final float K = 0.96f;
   
-  linear()
+  gyroscope()
   {
     this.d = 0;
-    this.aux = 0;
-    this.read = 0;
+    this.v = 0;
+    this.a = 0;
+    this.j = 0;
   }
   
-  public float step_vel(float read)
+  public void next_step(float read)
   {
-    this.read = sens_v * read + (1 - sens_v) * this.read;
-    this.d += 100 * 9.81f * dt * this.read; // 100 pois leitura em cm/s
-    return d;
+    float old_v = this.v;
+    float old_a = this.a;
+    this.v = K * read + (1 - K) * this.v;
+    this.d += this.v * dt;
+    this.a = (this.v - old_v) / dt;
+    this.j = (this.a - old_a) / dt;
   }
   
-  public float step_dis(float read)
+  public void wipe()
   {
-    this.read = sens_d * read + (1 - sens_d) * this.read;
-    this.aux += dt * this.read;
-    this.d += 100 * 9.81f * (dt * this.aux + 0.5f * dt * dt * this.read); // 100 pois leitura em cm
-    return d;
+    this.d = 0;
+    this.v = 0;
+    this.a = 0;
+    this.j = 0;
   }
 }
 
-class Obj_Kalman
+class accelerometer
 {
-  float Qt,
-        Qtb,
-        R,
-        P00,
-        P01,
-        P10,
-        P11,
-        bias,
-        ang;
-
-  Obj_Kalman(float Qt, float Qtb, float R, float P00, float P01, float P10, float P11,float bias, float ang) // Definindo a estrutura de dados do filtro de Kalman
+  float d, // Deslocamento linear
+        v, // Velocidade linear
+        a, // Aceleracao linear
+        j; // Variacao da aceleracao linear ("jerk" linear)
+  final float K = 0.96f;
+  
+  accelerometer()
   {
-    this.Qt = Qt;
-    this.Qtb = Qtb;
-    this.R = R;
-    this.P00 = P00;
-    this.P01 = P01;
-    this.P10 = P10;
-    this.P11 = P11;
-    this.bias = bias;
-    this.ang = ang;
+    this.d = 0;
+    this.v = 0;
+    this.a = 0;
+    this.j = 0;
   }
-
-  public float kalman_step(float read_vel/*, float read_ang*/) // Definindo a funcao do filtro com base no valor anterior e no valor lido
+  
+  public void next_step(float read)
   {
-    this.bias = 0.96f * read_vel + 0.04f * this.bias;
-    this.ang += bias * dt;
-    return ang;
-    /*
-    float rate = read_vel - bias;
-    this.ang += dt * rate;
-    this.P00 += dt * (dt*P11 - P01 - P10 + Qt);
-    this.P01 -= dt * P11;
-    this.P10 -= dt * P11;
-    this.P11 += dt * Qtb;
-    float S = P00 + R;
-    float K0 = P00/S;
-    float K1 = P10/S;
-    float temp_p00 = P00;
-    float temp_p01 = P01;
-    this.P00 -= K0*temp_p00;
-    this.P01 -= K0*temp_p01;
-    this.P10 -= K1*temp_p00;
-    this.P11 -= K1*temp_p01;
-    float y = read_ang - ang;
-    
-    this.ang += K0*y;
-    this.bias += K1*y;
-    return ang;*/
+    float old_a = this.a;
+    float old_v = this.v;
+    this.a = K * read + (1 - K) * this.a;
+    this.v += a * dt;
+    this.d += (old_v + this.v) * dt / 2;
+    this.j = (this.a - old_a) / dt;
+  }
+  
+  public void wipe()
+  {
+    this.d = 0;
+    this.v = 0;
+    this.a = 0;
+    this.j = 0;
   }
 }
 
-boolean start_prog = false;
+boolean start_prog = true;
 
 float accel_x, accel_y, accel_z, tmp,gyro_x, gyro_y, gyro_z = 0; // Valores medidos pelo sensor
 String acx, acy, acz, gyx, gyy, gyz; // Valores convertidos para mostrar na tela 
@@ -147,19 +134,8 @@ float f_dadox[] = new float[maxSize], f_dadoy[] = new float[maxSize], f_dadoz[] 
 float tempo[] = new float[maxSize]; // Vetor tempo
 int c = 0; // Contador
 
-Obj_Kalman k_x, k_y, k_z; // Variaveis que serao submetidas ao filtro Kalman (rotacao)
-
-linear d_x, d_y, d_z, v_x, v_y, v_z; // Variaveis que serao submetidas ao filtro Kalman (translacao)
-
-float ang_x = 0, // Valor Angulo X em graus
-      ang_y = 0, // Valor Angulo Y em graus
-      ang_z = 0, // Valor Angulo Z em graus
-      vel_x = 0,
-      vel_y = 0,
-      vel_z = 0,
-      dis_x = 0, // Distancia no eixo X (abertura)
-      dis_y = 0, // Distancia no eixo Y (desvio)
-      dis_z = 0; // Distancia no eixo Z (protracao)
+gyroscope gx, gy, gz;
+accelerometer ax, ay, az;
 
 float grav = 9.81f; // Gravidade
 float offset_acx = 0, // Valor de offset
@@ -220,8 +196,8 @@ public void setup() // Inicializacao do programa
   valorz = cp5.addDropdownList("Acel Z", 230, 140, 100, 84); // Insercao da lista valorz
   ac_unit = cp5.addDropdownList("m/s^2", 270, 235, 100, 84); // Insercao da lista ac_unit
   gy_unit = cp5.addDropdownList("grau/s", 270, 315, 100, 84); // Insercao da lista gy_unit
-  scale = cp5.addDropdownList("1x", XMAX/2 + 50, 2*gap + sqrwidth, 100, 84); // Insercao da lista scale
-  sample = cp5.addDropdownList("400 (padrao)", XMAX/2 + 255, 2*gap + sqrwidth, 100, 84); // Insercao da lista sample
+  scale = cp5.addDropdownList("1x", 10 + 50, 215, 100, 84); // Insercao da lista scale
+  sample = cp5.addDropdownList("400 (padrao)", 10 + 255, 215, 100, 84); // Insercao da lista sample
   savemode = cp5.addDropdownList("*.csv", 120, 15, 120, 84); // Insercao da lista savemode
   qtd = cp5.addDropdownList("3", 340, 140, 30, 84); // Insercao da lista qtd
   
@@ -231,9 +207,9 @@ public void setup() // Inicializacao do programa
   ddl_standard(sample, "400 (padrao):50:100:200:250:500:750:1000"); // Cria a lista filter
   ddl_standard(ac_unit, "m/s^2:g"); // Cria a lista ac_unit
   ddl_standard(gy_unit, "grau/s:rad/s"); // Cria a lista gy_unit
-  ddl_standard(valorx, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z"); // Cria a lista valorx
-  ddl_standard(valory, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z"); // Cria a lista valory
-  ddl_standard(valorz, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z"); // Cria a lista valorz
+  ddl_standard(valorx, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z: Jerk AX: Jerk AY: Jerk AZ: Jerk GX: Jerk GY: Jerk GZ"); // Cria a lista valorx
+  ddl_standard(valory, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z: Jerk AX: Jerk AY: Jerk AZ: Jerk GX: Jerk GY: Jerk GZ"); // Cria a lista valory
+  ddl_standard(valorz, "Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z: Jerk AX: Jerk AY: Jerk AZ: Jerk GX: Jerk GY: Jerk GZ"); // Cria a lista valorz
   ddl_standard(savemode, "*.csv:*.dat:*.txt"); // Cria a lista savemode
   ddl_standard(qtd, "3:2:1"); // Cria a lista qtd
   
@@ -252,19 +228,12 @@ public void setup() // Inicializacao do programa
   valory.setBackgroundColor(color(0, 255, 0)); // Cor de fundo da lista
   valorz.setBackgroundColor(color(0, 0, 255)); // Cor de fundo da lista
   
-  // Inicializando os parametros do filtro Kalman (Q, R, P etc.)
-  k_x = new Obj_Kalman(small_Qt, small_Qtb, small_R, big_P, 0, 0, big_P, 0, 0);
-  k_y = new Obj_Kalman(small_Qt, small_Qtb, small_R, big_P, 0, 0, big_P, 0, 0);
-  k_z = new Obj_Kalman(small_Qt, small_Qtb, small_R, big_P, 0, 0, big_P, 0, 0);
-  
-  d_x = new linear();
-  d_y = new linear();
-  d_z = new linear();
-  
-  v_x = new linear();
-  v_y = new linear();
-  v_z = new linear();
-  
+  gx = new gyroscope();
+  gy = new gyroscope();
+  gz = new gyroscope();
+  ax = new accelerometer();
+  ay = new accelerometer();
+  az = new accelerometer();
   tempo[0] = 0;
   
   if((int)cb_save.getArrayValue()[0] == 1)
@@ -285,7 +254,7 @@ public void draw() // Rotina em repeticao permanente
   rectMode(CORNERS); // Modo de desenho dos retangulos como CORNERS
   int i, j; // Variavel geral de laco 
   
-  text("v" + nf(version, 1, 0), XMAX-50, 580); 
+  text("v" + nf(version, 1, 0), XMAX-50, 880); 
   if(c < PApplet.parseInt(vSize/3))
   {
     fill(255,0,0);
@@ -308,7 +277,7 @@ public void draw() // Rotina em repeticao permanente
     }
   }
   fill(0);
-  if((int)cb_hide.getArrayValue()[0] == 0)
+  /*if((int)cb_hide.getArrayValue()[0] == 0)
   {   
     text("Velocidade x: " + nf(v_x.d, 1, 2) + "cm/s", 10, 430); // Imprimindo o valor da velocidade linear na tela
     text("Velocidade y: " + nf(v_y.d, 1, 2) + "cm/s", 10, 450); // Imprimindo o valor da velocidade linear na tela
@@ -316,60 +285,16 @@ public void draw() // Rotina em repeticao permanente
     text("Deslocamento x: " + nf(d_x.d, 1, 2) + "cm", 10, 490); // Imprimindo o valor do deslocamento linear na tela
     text("Deslocamento y: " + nf(d_y.d, 1, 2) + "cm", 10, 510); // Imprimindo o valor do deslocamento linear na tela
     text("Deslocamento z: " + nf(d_z.d, 1, 2) + "cm", 10, 530); // Imprimindo o valor do deslocamento linear na tela
-    text("Angulo x (pitch): " + nf(ang_x, 1, 2) + "\u00ba", 10, 550); // Imprimindo o valor do angulo na tela
-    text("Angulo y (yaw)  :" + nf(ang_y, 1, 2) + "\u00ba", 10, 570); // Imprimindo o valor do angulo na tela
-    text("Angulo z (roll) : " + nf(ang_z, 1, 2) + "\u00ba", 10, 590); // Imprimindo o valor do angulo na tela
-  }
-    
-  switch(PApplet.parseInt(valorx.getValue())) // Selecao de variavel eixo X
-  {
-    case 0: case 1: case 2:
-      scx = reg_ac;
-      break;
-    case 3: case 4: case 5:
-      scx = reg_gy;
-      break;
-    case 6: case 7: case 8:
-      scx = reg_ang;
-      break;
-    case 9: case 10: case 11:
-      scx = reg_pos;
-    case 12: case 13: case 14:
-      scx = reg_vel;
-  }
-  switch(PApplet.parseInt(valory.getValue())) // Selecao de variavel eixo Y
-  {
-    case 0: case 1: case 2:
-      scy = reg_ac;
-      break;
-    case 3: case 4: case 5:
-      scy = reg_gy;
-      break;
-    case 6: case 7: case 8:
-      scy = reg_ang;
-      break;
-    case 9: case 10: case 11:
-      scy = reg_pos;
-    case 12: case 13: case 14:
-      scy = reg_vel;
-  }
+    text("Angulo x (pitch): " + nf(ax.x, 1, 2) + "\u00ba", 10, 550); // Imprimindo o valor do angulo na tela
+    text("Angulo y (yaw)  :" + nf(ay.x, 1, 2) + "\u00ba", 10, 570); // Imprimindo o valor do angulo na tela
+    text("Angulo z (roll) : " + nf(az.x, 1, 2) + "\u00ba", 10, 590); // Imprimindo o valor do angulo na tela
+  }*/
   
-  switch(PApplet.parseInt(valorz.getValue())) // Selecao de variavel 3
-  {
-    case 0: case 1: case 2:
-      scz = reg_ac;
-      break;
-    case 3: case 4: case 5:
-      scz = reg_gy;
-      break;
-    case 6: case 7: case 8:
-      scz = reg_ang;
-      break;
-    case 9: case 10: case 11:
-      scz = reg_pos;
-    case 12: case 13: case 14:
-      scz = reg_vel;    
-  }
+  scx = getreg(PApplet.parseInt(valorx.getValue())); // Selecao de variavel eixo X
+  scy = getreg(PApplet.parseInt(valory.getValue())); // Selecao de variavel eixo Y
+  scz = getreg(PApplet.parseInt(valorz.getValue())); // Selecao de variavel eixo Z
+
+  // Grafico superior
   
   noFill(); // Desabilita preenchimento
   rect(XMAX - (gap + sqrwidth), gap, XMAX - gap, sqrwidth + gap); // Grade externa dos eixos
@@ -378,10 +303,18 @@ public void draw() // Rotina em repeticao permanente
   mode_xy = PApplet.parseInt(axismode.getValue()); // Le lista axismode
   mode_line = PApplet.parseInt(fillmode.getValue()); // Le lista fillmode
   
-  for(j=0;j<c;j++) dadoy[j] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadoy[j] * sqrwidth/2) / scy; // Dados de plot do eixo y
+  for(j=0;j<c;j++)
+    if(abs((1 + mode_scale)*f_dadoy[j]/scy) <= 1.0f)
+      dadoy[j] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadoy[j] * sqrwidth/2) / scy; // Dados de plot do eixo y
+    else
+      dadoy[j] = gap + sqrwidth/2 - (sign(f_dadoy[j])*sqrwidth/2); // Dados de plot do eixo y
   if(mode_xy != 0)
   {
-    for(j=0;j<c;j++) dadox[j] = XMAX - (gap + sqrwidth/2) + (1 + mode_scale)*(f_dadox[j] * sqrwidth/2) / scx; // Dados de plot do eixo x
+    for(j=0;j<c;j++)
+      if(abs((1 + mode_scale)*f_dadox[j]/scx) <= 1.0f)
+        dadox[j] = XMAX - (gap + sqrwidth/2) + (1 + mode_scale)*(f_dadox[j] * sqrwidth/2) / scx; // Dados de plot do eixo x
+      else
+        dadox[j] = XMAX - (gap + sqrwidth/2) + (sign(f_dadox[j]) * sqrwidth/2); // Dados de plot do eixo x
     line(XMAX - (gap + sqrwidth/2), gap, XMAX - (gap + sqrwidth/2), sqrwidth + gap); // Eixo Y do plano cartesiano
     fill(0, 255, 0); // Preenche proximos desenhos de verde
     stroke(0, 255, 0); // Habilita linhas de contorno verdes
@@ -395,8 +328,16 @@ public void draw() // Rotina em repeticao permanente
   }
   else
   {
-    for(j=0;j<c;j++) dadox[j] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadox[j] * sqrwidth/2) / scx; // Dados de plot 1
-    for(j=0;j<c;j++) dadoz[j] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadoz[j] * sqrwidth/2) / scz; // Dados de plot 3
+    for(j=0;j<c;j++)
+      if(abs((1 + mode_scale)*f_dadox[j]/scx) <= 1.0f)
+        dadox[j] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadox[j] * sqrwidth/2) / scx; // Dados de plot 1
+      else
+        dadox[j] = gap + sqrwidth/2 - (sign(f_dadox[j])*sqrwidth/2); // Dados de plot 1
+    for(j=0;j<c;j++)
+      if(abs((1 + mode_scale)*f_dadoz[j]/scz) <= 1.0f)
+        dadoz[j] = gap + sqrwidth/2 - (1 + mode_scale)*(f_dadoz[j] * sqrwidth/2) / scz; // Dados de plot 3
+      else
+        dadoz[j] = gap + sqrwidth/2 - (sign(f_dadoz[j])*sqrwidth/2); // Dados de plot 3
     for(i=1;i<vSize;i++)
     {
       stroke(255, 0, 0); // Habilita linhas de contorno vermelhos
@@ -427,6 +368,14 @@ public void draw() // Rotina em repeticao permanente
     }
     stroke(0); // Habilita linhas de contorno pretas
   }
+  
+  // Grafico inferior
+  
+  noFill(); // Desabilita preenchimento
+  rect(XMAX - (gap + sqrwidth), 430, XMAX - gap, sqrwidth + 430); // Grade externa dos eixos
+  fill(0); // Preenche proximos desenhos de preto
+  line(XMAX - (gap + sqrwidth), 430 + sqrwidth/2, XMAX - gap, 430 + sqrwidth/2); // Eixo X do plano cartesiano
+  
   switch(PApplet.parseInt(ac_unit.getValue())) // Selecao de unidade do acelerometro
   {
     case 0:
@@ -457,8 +406,8 @@ public void draw() // Rotina em repeticao permanente
   fill(0); // Preenche proximos desenhos de preto
   text("Valores a serem representados no grafico:", 10, 135); // Texto informativo
   text("Propriedades de visualizacao:", 10, 75); // Texto informativo
-  text("Zoom:", XMAX/2, 3*gap + sqrwidth); // Texto informativo
-  text("Amostragem:", XMAX/2+ 155, 3*gap + sqrwidth); // Texto informativo
+  text("Zoom:", 10, 230); // Texto informativo
+  text("Amostragem:", 10 + 155, 230); // Texto informativo
   /*text("Ramo da mandibula:", XMAX/2, 2*gap + sqrwidth + 35); // Texto informativo
   text("Corpo da mandibula:", XMAX/2, 2*gap + sqrwidth + 60); // Texto informativo
   text("Angulo da mandibula:", XMAX/2, 2*gap + sqrwidth + 85); // Texto informativo
@@ -470,11 +419,11 @@ public void draw() // Rotina em repeticao permanente
 
   if((int)cb_hide.getArrayValue()[0] == 0)
   {
-    text("Unidade:", 270, 230); // Texto informativo
-    text("Unidade:", 270, 310); // Texto informativo
+    /*text("Unidade:", 270, 230); // Texto informativo
+    text("Unidade:", 270, 310); // Texto informativo*/
     text("Delay:" + PApplet.parseInt(1000*dt) + "ms (" + PApplet.parseInt(1/dt) + " Hz)", 10, 410); // Imprime mensagem de erro
     
-    if(accel_x == -1.0f && accel_y == -1.0f && accel_z == -1.0f && gyro_x == -1.0f && gyro_y == -1.0f && gyro_z == -1.0f && tmp == 36.53f) // Se todos forem iguais ao valor que geralmente representa erro no protocolo I2C de comunicacao
+    /*if(accel_x == -1.0 && accel_y == -1.0 && accel_z == -1.0 && gyro_x == -1.0 && gyro_y == -1.0 && gyro_z == -1.0 && tmp == 36.53) // Se todos forem iguais ao valor que geralmente representa erro no protocolo I2C de comunicacao
     {
       text("Leitura acelerometro X: Erro na comunicacao!", 10, 230); // Imprime mensagem de erro
       text("Leitura acelerometro Y: Erro na comunicacao!", 10, 250); // Imprime mensagem de erro
@@ -492,26 +441,23 @@ public void draw() // Rotina em repeticao permanente
       text("Leitura giroscopio X: " + gyx, 10, 310); // Imprime valor lido
       text("Leitura giroscopio Y: " + gyy, 10, 330); // Imprime valor lido
       text("Leitura giroscopio Z: " + gyz, 10, 350); // Imprime valor lido
-      text("Temperatura: " + PApplet.parseInt(tmp) + "\u00baC", 10, 390); // Imprime valor lido
-    }
+      text("Temperatura: " + int(tmp) + "\u00baC", 10, 390); // Imprime valor lido
+    }*/
   }
 }
 
 public void math()
 {
   int i;
-  ang_x = k_x.kalman_step(gyro_x/*, ang_x*/); // Filtro de Kalman para selecionar o angulo
-  ang_y = k_y.kalman_step(gyro_y/*, ang_y*/); // Filtro de Kalman para selecionar o angulo
-  ang_z = k_z.kalman_step(gyro_z/*, ang_z*/); // Filtro de Kalman para selecionar o angulo
   
-  dis_x = d_x.step_dis(accel_x);
-  dis_y = d_y.step_dis(accel_y);
-  dis_z = d_z.step_dis(accel_z);
- 
-  vel_x = v_x.step_vel(accel_x);
-  vel_y = v_y.step_vel(accel_y);
-  vel_z = v_z.step_vel(accel_z);
+  gx.next_step(gyro_x);
+  gy.next_step(gyro_y);
+  gz.next_step(gyro_z);
   
+  ax.next_step(accel_x);
+  ay.next_step(accel_y);
+  az.next_step(accel_z);
+    
   switch(PApplet.parseInt(sample.getValue())) // Selecao de quantidade de dados gravados por ciclo
   {
     case 0:
@@ -615,27 +561,13 @@ public void controlEvent(ControlEvent ev)
     }
     g_c = 0;
     c = 0;
-    k_x.ang = 0;
-    k_x.bias = 0;
-    k_y.ang = 0;
-    k_y.bias = 0;
-    k_z.ang = 0;
-    k_z.bias = 0;
-    d_x.d = 0;
-    d_x.aux = 0;
-    d_x.read = 0;
-    d_y.d = 0;
-    d_y.aux = 0;
-    d_y.read = 0;
-    d_z.d = 0;
-    d_z.aux = 0;
-    d_z.read = 0;
-    v_x.d = 0;
-    v_x.read = 0;
-    v_y.d = 0;
-    v_y.read = 0;
-    v_z.d = 0;
-    v_z.read = 0;
+    gx.wipe(); // Limpa os dados salvos no giroscopio
+    gy.wipe(); // Limpa os dados salvos no giroscopio
+    gz.wipe(); // Limpa os dados salvos no giroscopio
+    ax.wipe(); // Limpa os dados salvos no acelerometro
+    ay.wipe(); // Limpa os dados salvos no acelerometro
+    az.wipe(); // Limpa os dados salvos no acelerometro
+    
     offset_acx = 0; // Valor de offset
     offset_acy = 0; // Valor de offset
     offset_acz = 0; // Valor de offset
@@ -681,9 +613,9 @@ public void loadPreferences()
   rename(savemode,"*.csv:*.dat:*.txt",decode(st[1])[0]);
   rename(axismode,"Modo YT:Modo XY",decode(st[3])[0]);
   rename(fillmode,"Pontos:Linhas",decode(st[4])[0]);
-  rename(valorx,"Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z",decode(st[5])[0]);
-  rename(valory,"Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z",decode(st[6])[0]);
-  rename(valorz,"Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z",decode(st[7])[0]);
+  rename(valorx,"Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z: Jerk AX: Jerk AY: Jerk AZ: Jerk GX: Jerk GY: Jerk GZ",decode(st[5])[0]);
+  rename(valory,"Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z: Jerk AX: Jerk AY: Jerk AZ: Jerk GX: Jerk GY: Jerk GZ",decode(st[6])[0]);
+  rename(valorz,"Acel X:Acel Y:Acel Z:Gyro X:Gyro Y:Gyro Z:Ang X:Ang Y:Ang Z:Desl X:Desl Y:Desl Z:Vel X:Vel Y:Vel Z: Jerk AX: Jerk AY: Jerk AZ: Jerk GX: Jerk GY: Jerk GZ",decode(st[7])[0]);
   rename(qtd,"3:2:1",decode(st[8])[0]);
   rename(ac_unit,"m/s^2:g",decode(st[9])[0]);
   rename(gy_unit,"grau/s:rad/s",decode(st[10])[0]);
@@ -735,6 +667,8 @@ public float[] decode(String val)
   st[0] = PApplet.parseFloat(stemp[1]);
   return st;
 }
+
+final float gcmax = 20;
 public void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na porta serial
 {
   String xString = myPort.readStringUntil('\n'); // Ler o que foi escrito ate a quebra de linha
@@ -755,22 +689,25 @@ public void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrit
        * Sendo cada numero entre os dois-pontos uma das leituras, na ordem:
        * acelerometro x, y, z, temperatura, giroscopio x, y, z
        * */
-      accel_x = (PApplet.parseFloat(temp[0].substring(1, temp[0].length()-1 )) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
+      temp[0] = temp[0].substring(1, temp[0].length()-1 ); // Removendo o '#' do primeiro item
+      //println(temp[0] + '\t' + '\t' + temp[1] + '\t' + '\t' + temp[2] + '\t' + '\t' + temp[3] + '\t' + '\t' + temp[4] + '\t' + '\t' + temp[5] + '\t' + '\t' + temp[6]);
+      accel_x = (PApplet.parseFloat(temp[0]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       accel_y = (PApplet.parseFloat(temp[1]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       accel_z = (PApplet.parseFloat(temp[2]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       tmp = PApplet.parseFloat(temp[3]); // Atualiza variavel global
       gyro_x = (PApplet.parseFloat(temp[4]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       gyro_y = (PApplet.parseFloat(temp[5]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       gyro_z = (PApplet.parseFloat(temp[6]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
-      if(g_c < 10)
+      if(g_c < gcmax)
       {
         g_c++;
-        offset_acx += 0.1f * accel_x;
-        offset_acy += 0.1f * accel_y;
-        offset_acz += 0.1f * accel_z;
-        offset_gyx += 0.1f * gyro_x;
-        offset_gyy += 0.1f * gyro_y;
-        offset_gyz += 0.1f * gyro_z;
+        offset_acx += accel_x / gcmax;
+        offset_acy += accel_y / gcmax;
+        offset_acz += accel_z / gcmax;
+        offset_gyx += gyro_x / gcmax;
+        offset_gyy += gyro_y / gcmax;
+        offset_gyz += gyro_z / gcmax;
+        gx.wipe();gy.wipe();gz.wipe();ax.wipe();ay.wipe();az.wipe();c=0;tempo[0]=0;
         //println(offset_acx + ":" + offset_acy + ":" + offset_acz + ":" + offset_gyx + ":" + offset_gyy + ":" + offset_gyz);
       }
       else
@@ -854,40 +791,73 @@ public float getdata(int val)
   switch(val) // Selecao de variavel
   {
     case 0:
-      return accel_x;
+      return ax.a;
     case 1:
-      return accel_y;
+      return ay.a;
     case 2:
-      return accel_z;
+      return az.a;
     case 3:
-      return gyro_x;
+      return gx.v;
     case 4:
-      return gyro_y;
+      return gy.v;
     case 5:
-      return gyro_z;
+      return gz.v;
     case 6:
-      return ang_x;
+      return gx.d;
     case 7:
-      return ang_y;
+      return gy.d;
     case 8:
-      return ang_z;
+      return gz.d;
     case 9:
-      return dis_x;
+      return ax.d;
     case 10:
-      return dis_y;
+      return ay.d;
     case 11:
-      return dis_z;
+      return az.d;
     case 12:
-      return vel_x;
+      return ax.v;
     case 13:
-      return vel_y;
+      return ay.v;
     case 14:
-      return vel_z;
+      return az.v;
+    case 15:
+      return ax.j;
+    case 16:
+      return ay.j;
+    case 17:
+      return az.j;
+    case 18:
+      return gx.j;
+    case 19:
+      return gy.j;
+    case 20:
+      return gz.j;
     default:
       return -1.0f;
   }
 }
-
+public float getreg(int val)
+{
+  switch(val)
+  {
+    case 0: case 1: case 2:
+      return reg_ac;
+    case 3: case 4: case 5:
+      return reg_gy;
+    case 6: case 7: case 8:
+      return reg_ang;
+    case 9: case 10: case 11:
+      return reg_pos;
+    case 12: case 13: case 14:
+      return reg_vel;
+    case 15: case 16: case 17:
+      return reg_ajerk;
+    case 18: case 19: case 20:
+      return reg_gjerk;
+    default:
+      return 0;
+  }
+}
 /* Funcao rot() retorna o valor rotacionado de uma variavel
  * A funcao usa as coordenadas originais (x, y, z) e rotaciona
  * de acordo com os angulos de euler (a, b, c) (em radianos). 
@@ -1010,6 +980,15 @@ public void writecsv(int rFlag, float data1[], float data2[], float data3[], flo
   }
 }
 
+public int sign(float f)
+{
+  if (f > 0.0f)
+    return 1;
+  if (f < 0.0f)
+    return -1;
+  return 0;
+} 
+
 public String getFolder()
 {
   String full = sketchPath("");
@@ -1051,7 +1030,7 @@ public void create_file()
   tbl[0] = "x"; // Preenchendo a primeira linha com qualquer coisa para sobrescrever qualquer arquivo que possa existir
   saveStrings(out+ext, tbl); // Salvando arquivo sob o nome de output_[data]_[hora].csv
 }
-  public void settings() {  size(800, 600, P2D); }
+  public void settings() {  size(800, 900, P2D); }
   static public void main(String[] passedArgs) {
     String[] appletArgs = new String[] { "Processing" };
     if (passedArgs != null) {
