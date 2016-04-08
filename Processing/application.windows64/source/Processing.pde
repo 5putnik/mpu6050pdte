@@ -5,7 +5,7 @@ final float version = 1.5;
 
 // Parametros fixos
 float dt = 0; // Passo entre as medicoes (20 ms) (pode variar)
-int acu = 0; // Variavel auxiliar para o calculo variavel do dt
+long acu = 0; // Variavel auxiliar para o calculo variavel do dt
 
 final float big_P = 50; // Parametro do filtro de Kalman: define a incerteza
 final float small_Qt = 0.001; // Parametro do filtro de Kalman: define a velocidade de resposta
@@ -100,7 +100,7 @@ class accelerometer
   }
 }
 
-boolean start_prog = true;
+boolean start_prog = false;
 
 float accel_x, accel_y, accel_z, tmp,gyro_x, gyro_y, gyro_z = 0; // Valores medidos pelo sensor
 String acx, acy, acz, gyx, gyy, gyz; // Valores convertidos para mostrar na tela 
@@ -229,7 +229,11 @@ void draw() // Rotina em repeticao permanente
     text("ERRO: Arduino nao conectado. Conecte o Arduino e reinicie o programa.",200,200);
   }
   if(!start_prog || g_c < 10)
+  {
+    background(0,0,100);
+    text("Arduino encontrado. Esperando comunicacao...",200,200);
     return;
+  }
   background(255, 255, 255); // Tela de fundo branca
   textFont(f, 16); // Fonte tamanho 16
   rectMode(CORNERS); // Modo de desenho dos retangulos como CORNERS
@@ -258,18 +262,18 @@ void draw() // Rotina em repeticao permanente
     }
   }
   fill(0);
-  /*if((int)cb_hide.getArrayValue()[0] == 0)
+  if((int)cb_hide.getArrayValue()[0] == 0)
   {   
-    text("Velocidade x: " + nf(v_x.d, 1, 2) + "cm/s", 10, 430); // Imprimindo o valor da velocidade linear na tela
-    text("Velocidade y: " + nf(v_y.d, 1, 2) + "cm/s", 10, 450); // Imprimindo o valor da velocidade linear na tela
-    text("Velocidade z: " + nf(v_z.d, 1, 2) + "cm/s", 10, 470); // Imprimindo o valor da velocidade linear na tela
-    text("Deslocamento x: " + nf(d_x.d, 1, 2) + "cm", 10, 490); // Imprimindo o valor do deslocamento linear na tela
-    text("Deslocamento y: " + nf(d_y.d, 1, 2) + "cm", 10, 510); // Imprimindo o valor do deslocamento linear na tela
-    text("Deslocamento z: " + nf(d_z.d, 1, 2) + "cm", 10, 530); // Imprimindo o valor do deslocamento linear na tela
-    text("Angulo x (pitch): " + nf(ax.x, 1, 2) + "º", 10, 550); // Imprimindo o valor do angulo na tela
-    text("Angulo y (yaw)  :" + nf(ay.x, 1, 2) + "º", 10, 570); // Imprimindo o valor do angulo na tela
-    text("Angulo z (roll) : " + nf(az.x, 1, 2) + "º", 10, 590); // Imprimindo o valor do angulo na tela
-  }*/
+    text("Velocidade x: " + nf(ax.v, 1, 2) + "cm/s", 10, 430); // Imprimindo o valor da velocidade linear na tela
+    text("Velocidade y: " + nf(ay.v, 1, 2) + "cm/s", 10, 450); // Imprimindo o valor da velocidade linear na tela
+    text("Velocidade z: " + nf(az.v, 1, 2) + "cm/s", 10, 470); // Imprimindo o valor da velocidade linear na tela
+    text("Deslocamento x: " + nf(ax.d, 1, 2) + "cm", 10, 490); // Imprimindo o valor do deslocamento linear na tela
+    text("Deslocamento y: " + nf(ay.d, 1, 2) + "cm", 10, 510); // Imprimindo o valor do deslocamento linear na tela
+    text("Deslocamento z: " + nf(az.d, 1, 2) + "cm", 10, 530); // Imprimindo o valor do deslocamento linear na tela
+    text("Angulo x (pitch): " + nf(gx.d, 1, 2) + "º", 10, 550); // Imprimindo o valor do angulo na tela
+    text("Angulo y (yaw)  :" + nf(gy.d, 1, 2) + "º", 10, 570); // Imprimindo o valor do angulo na tela
+    text("Angulo z (roll) : " + nf(gz.d, 1, 2) + "º", 10, 590); // Imprimindo o valor do angulo na tela
+  }
   
   scx = getreg(int(valorx.getValue())); // Selecao de variavel eixo X
   scy = getreg(int(valory.getValue())); // Selecao de variavel eixo Y
@@ -404,7 +408,7 @@ void draw() // Rotina em repeticao permanente
     text("Unidade:", 270, 310); // Texto informativo*/
     text("Delay:" + int(1000*dt) + "ms (" + int(1/dt) + " Hz)", 10, 410); // Imprime mensagem de erro
     
-    /*if(accel_x == -1.0 && accel_y == -1.0 && accel_z == -1.0 && gyro_x == -1.0 && gyro_y == -1.0 && gyro_z == -1.0 && tmp == 36.53) // Se todos forem iguais ao valor que geralmente representa erro no protocolo I2C de comunicacao
+    if(accel_x == -1.0 && accel_y == -1.0 && accel_z == -1.0 && gyro_x == -1.0 && gyro_y == -1.0 && gyro_z == -1.0 && tmp == 36.53) // Se todos forem iguais ao valor que geralmente representa erro no protocolo I2C de comunicacao
     {
       text("Leitura acelerometro X: Erro na comunicacao!", 10, 230); // Imprime mensagem de erro
       text("Leitura acelerometro Y: Erro na comunicacao!", 10, 250); // Imprime mensagem de erro
@@ -423,7 +427,7 @@ void draw() // Rotina em repeticao permanente
       text("Leitura giroscopio Y: " + gyy, 10, 330); // Imprime valor lido
       text("Leitura giroscopio Z: " + gyz, 10, 350); // Imprime valor lido
       text("Temperatura: " + int(tmp) + "ºC", 10, 390); // Imprime valor lido
-    }*/
+    }
   }
 }
 
@@ -658,10 +662,10 @@ void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na po
     String  temp[]  =  split(xString,":"); // Separar os dados cada vez que dois-pontos for encontrado
     if(xString.charAt(0)  ==  '#'  &&  temp.length==7) // Se o primeiro caractere escrito for cerquilha e 8 elementos forem lidos
     {
-      dt = (millis() - acu)/1000.0;
+      dt = ((float)(System.nanoTime() - acu))*1.0e-9;
       if(!start_prog)
         dt = 0;
-      acu = millis();
+      acu = System.nanoTime();
       start_prog = true; // habilita o programa a inicializar
       /* 
        * Protocolo de comunicacao definido por mim:
@@ -702,7 +706,7 @@ void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na po
       }
       if(g_c == 1) loadPreferences(); // Carrega as preferencias
       if(g_c >= 10) math(); // Executa os parametros matematicos do programa 
-      delay(10);
+      //delay(10);
     }
 
   }
