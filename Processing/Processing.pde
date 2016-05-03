@@ -23,8 +23,10 @@ final float reg_ac = 2, // Faixa do acelerometro: +/- 2g
 final int maxSize = 1000; // Quantidade maxima de dados a ser salva
 
 final int XMAX = 800, // Parametro: Tamanho X da tela
+          XMAX2 = 1260, // Parametro: Tamanho X da tela
           gap = 10, // Parametro: espacamento geral
           sqrwidth = 400; // Parametro: tamanho do grafico
+          
 String ext = ".csv";
 String out = "../../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hour(),2)+nf(minute(),2)+nf(second(),2);
 
@@ -102,7 +104,7 @@ class accelerometer
 
 boolean start_prog = false;
 
-float accel_x, accel_y, accel_z, tmp,gyro_x, gyro_y, gyro_z = 0; // Valores medidos pelo sensor
+float accel_x = 0, accel_y = 0, accel_z = 0, tmp,gyro_x = 0, gyro_y = 0, gyro_z = 0; // Valores medidos pelo sensor
 String acx, acy, acz, gyx, gyy, gyz; // Valores convertidos para mostrar na tela 
 
 float d1, d2, d3, d4; // Valores escritos pelo usuario na tela (medidas da mandibula)
@@ -161,7 +163,7 @@ void setup() // Inicializacao do programa
 {
   if(getFolder().equals("Processing"))
     out = "../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hour(),2)+nf(minute(),2)+nf(second(),2);
-  size(800, 900, P2D); // Gerando uma tela 800x600 com renderizacao 2D melhorada
+  size(1260, 600, P2D); // Gerando uma tela 800x600 com renderizacao 2D melhorada
   if(Serial.list().length == 0)
     return;
   //myPort = new Serial(this, Serial.list()[0], 9600); // Associando MyPort as portas seriais do computador
@@ -175,8 +177,8 @@ void setup() // Inicializacao do programa
   valorx = cp5.addDropdownList("Acel X", 10, 140, 100, 84); // Insercao da lista valorx
   valory = cp5.addDropdownList("Acel Y", 120, 140, 100, 84); // Insercao da lista valory
   valorz = cp5.addDropdownList("Acel Z", 230, 140, 100, 84); // Insercao da lista valorz
-  ac_unit = cp5.addDropdownList("m/s^2", 270, 235, 100, 84); // Insercao da lista ac_unit
-  gy_unit = cp5.addDropdownList("grau/s", 270, 315, 100, 84); // Insercao da lista gy_unit
+  ac_unit = cp5.addDropdownList("m/s^2", 270, 270, 100, 84); // Insercao da lista ac_unit
+  gy_unit = cp5.addDropdownList("grau/s", 270, 330, 100, 84); // Insercao da lista gy_unit
   scale = cp5.addDropdownList("1x", 10 + 50, 215, 100, 84); // Insercao da lista scale
   sample = cp5.addDropdownList("400 (padrao)", 10 + 255, 215, 100, 84); // Insercao da lista sample
   savemode = cp5.addDropdownList("*.csv", 120, 15, 120, 84); // Insercao da lista savemode
@@ -227,6 +229,7 @@ void draw() // Rotina em repeticao permanente
   {
     background(0); // Tela de fundo preta
     text("ERRO: Arduino nao conectado. Conecte o Arduino e reinicie o programa.",200,200);
+    return;
   }
   if(!start_prog || g_c < 10)
   {
@@ -357,9 +360,9 @@ void draw() // Rotina em repeticao permanente
   // Grafico inferior
   
   noFill(); // Desabilita preenchimento
-  rect(XMAX - (gap + sqrwidth), 430, XMAX - gap, sqrwidth + 430); // Grade externa dos eixos
+  rect(XMAX2 - (gap + sqrwidth), gap, XMAX2 - gap, sqrwidth + gap); // Grade externa dos eixos
   fill(0); // Preenche proximos desenhos de preto
-  line(XMAX - (gap + sqrwidth), 430 + sqrwidth/2, XMAX - gap, 430 + sqrwidth/2); // Eixo X do plano cartesiano
+  line(XMAX2 - (gap + sqrwidth), gap + sqrwidth/2, XMAX2 - gap, gap + sqrwidth/2); // Eixo X do plano cartesiano
   
   switch(int(ac_unit.getValue())) // Selecao de unidade do acelerometro
   {
@@ -389,7 +392,7 @@ void draw() // Rotina em repeticao permanente
       break;
   }
   fill(0); // Preenche proximos desenhos de preto
-  text("Valores a serem representados no grafico:", 10, 135); // Texto informativo
+  text("Valores a serem representados nos graficos:", 10, 135); // Texto informativo
   text("Propriedades de visualizacao:", 10, 75); // Texto informativo
   text("Zoom:", 10, 230); // Texto informativo
   text("Amostragem:", 10 + 155, 230); // Texto informativo
@@ -410,22 +413,22 @@ void draw() // Rotina em repeticao permanente
     
     if(accel_x == -1.0 && accel_y == -1.0 && accel_z == -1.0 && gyro_x == -1.0 && gyro_y == -1.0 && gyro_z == -1.0 && tmp == 36.53) // Se todos forem iguais ao valor que geralmente representa erro no protocolo I2C de comunicacao
     {
-      text("Leitura acelerometro X: Erro na comunicacao!", 10, 230); // Imprime mensagem de erro
-      text("Leitura acelerometro Y: Erro na comunicacao!", 10, 250); // Imprime mensagem de erro
-      text("Leitura acelerometro Z: Erro na comunicacao!", 10, 270); // Imprime mensagem de erro
-      text("Leitura giroscopio X: Erro na comunicacao!", 10, 310); // Imprime mensagem de erro
-      text("Leitura giroscopio Y: Erro na comunicacao!", 10, 330); // Imprime mensagem de erro
-      text("Leitura giroscopio Z: Erro na comunicacao!", 10, 350); // Imprime mensagem de erro
+      text("Leitura acelerometro X: Erro na comunicacao!", 10, 270); // Imprime mensagem de erro
+      text("Leitura acelerometro Y: Erro na comunicacao!", 10, 290); // Imprime mensagem de erro
+      text("Leitura acelerometro Z: Erro na comunicacao!", 10, 310); // Imprime mensagem de erro
+      text("Leitura giroscopio X: Erro na comunicacao!", 10, 330); // Imprime mensagem de erro
+      text("Leitura giroscopio Y: Erro na comunicacao!", 10, 350); // Imprime mensagem de erro
+      text("Leitura giroscopio Z: Erro na comunicacao!", 10, 370); // Imprime mensagem de erro
       text("Temperatura: Erro na comunicacao!", 10, 390); // Imprime mensagem de erro
     }
     else
     {
-      text("Leitura acelerometro X: " + acx, 10, 230); // Imprime valor lido
-      text("Leitura acelerometro Y: " + acy, 10, 250); // Imprime valor lido
-      text("Leitura acelerometro Z: " + acz, 10, 270); // Imprime valor lido
-      text("Leitura giroscopio X: " + gyx, 10, 310); // Imprime valor lido
-      text("Leitura giroscopio Y: " + gyy, 10, 330); // Imprime valor lido
-      text("Leitura giroscopio Z: " + gyz, 10, 350); // Imprime valor lido
+      text("Leitura acelerometro X: " + acx, 10, 270); // Imprime valor lido
+      text("Leitura acelerometro Y: " + acy, 10, 290); // Imprime valor lido
+      text("Leitura acelerometro Z: " + acz, 10, 310); // Imprime valor lido
+      text("Leitura giroscopio X: " + gyx, 10, 330); // Imprime valor lido
+      text("Leitura giroscopio Y: " + gyy, 10, 350); // Imprime valor lido
+      text("Leitura giroscopio Z: " + gyz, 10, 370); // Imprime valor lido
       text("Temperatura: " + int(tmp) + "ºC", 10, 390); // Imprime valor lido
     }
   }
@@ -674,8 +677,9 @@ void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na po
        * Sendo cada numero entre os dois-pontos uma das leituras, na ordem:
        * acelerometro x, y, z, temperatura, giroscopio x, y, z
        * */
-      temp[0] = temp[0].substring(1, temp[0].length()-1 ); // Removendo o '#' do primeiro item
+      temp[0] = temp[0].substring(1, temp[0].length()); // Removendo o '#' do primeiro item
       //println(temp[0] + '\t' + '\t' + temp[1] + '\t' + '\t' + temp[2] + '\t' + '\t' + temp[3] + '\t' + '\t' + temp[4] + '\t' + '\t' + temp[5] + '\t' + '\t' + temp[6]);
+      println(temp[0] + ":" + temp[1] + ":" + temp[2] + ":" + temp[3] + ":" + temp[4] + ":" + temp[5] + ":" + temp[6]);
       accel_x = (float(temp[0]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       accel_y = (float(temp[1]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       accel_z = (float(temp[2]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
@@ -683,6 +687,7 @@ void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na po
       gyro_x = (float(temp[4]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       gyro_y = (float(temp[5]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       gyro_z = (float(temp[6]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
+      
       if(g_c < gcmax)
       {
         g_c++;
