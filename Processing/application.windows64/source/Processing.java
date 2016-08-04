@@ -26,6 +26,9 @@ final float version = 1.5f;
 float dt = 0; // Passo entre as medicoes (20 ms) (pode variar)
 long acu = 0; // Variavel auxiliar para o calculo variavel do dt
 
+int p = 0, // Leitura anterior do botao
+    turn_off = 0; // Vez em que o botao foi acionado (0 = ligando, 1 = desligando)
+
 final float big_P = 50; // Parametro do filtro de Kalman: define a incerteza
 final float small_Qt = 0.001f; // Parametro do filtro de Kalman: define a velocidade de resposta
 final float small_Qtb = 0.003f; // Parametro do filtro de Kalman: define a velocidade de resposta
@@ -42,8 +45,10 @@ final float reg_ac = 2, // Faixa do acelerometro: +/- 2g
 final int maxSize = 1000; // Quantidade maxima de dados a ser salva
 
 final int XMAX = 800, // Parametro: Tamanho X da tela
+          XMAX2 = 1260, // Parametro: Tamanho X da tela
           gap = 10, // Parametro: espacamento geral
           sqrwidth = 400; // Parametro: tamanho do grafico
+          
 String ext = ".csv";
 String out = "../../output_"+year()+"_"+nf(month(),2)+"_"+nf(day(),2)+"_"+nf(hour(),2)+nf(minute(),2)+nf(second(),2);
 
@@ -121,7 +126,7 @@ class accelerometer
 
 boolean start_prog = false;
 
-float accel_x, accel_y, accel_z, tmp,gyro_x, gyro_y, gyro_z = 0; // Valores medidos pelo sensor
+float accel_x = 0, accel_y = 0, accel_z = 0, tmp,gyro_x = 0, gyro_y = 0, gyro_z = 0; // Valores medidos pelo sensor
 String acx, acy, acz, gyx, gyy, gyz; // Valores convertidos para mostrar na tela 
 
 float d1, d2, d3, d4; // Valores escritos pelo usuario na tela (medidas da mandibula)
@@ -194,8 +199,8 @@ public void setup() // Inicializacao do programa
   valorx = cp5.addDropdownList("Acel X", 10, 140, 100, 84); // Insercao da lista valorx
   valory = cp5.addDropdownList("Acel Y", 120, 140, 100, 84); // Insercao da lista valory
   valorz = cp5.addDropdownList("Acel Z", 230, 140, 100, 84); // Insercao da lista valorz
-  ac_unit = cp5.addDropdownList("m/s^2", 270, 235, 100, 84); // Insercao da lista ac_unit
-  gy_unit = cp5.addDropdownList("grau/s", 270, 315, 100, 84); // Insercao da lista gy_unit
+  ac_unit = cp5.addDropdownList("m/s^2", 270, 270, 100, 84); // Insercao da lista ac_unit
+  gy_unit = cp5.addDropdownList("grau/s", 270, 330, 100, 84); // Insercao da lista gy_unit
   scale = cp5.addDropdownList("1x", 10 + 50, 215, 100, 84); // Insercao da lista scale
   sample = cp5.addDropdownList("400 (padrao)", 10 + 255, 215, 100, 84); // Insercao da lista sample
   savemode = cp5.addDropdownList("*.csv", 120, 15, 120, 84); // Insercao da lista savemode
@@ -246,6 +251,7 @@ public void draw() // Rotina em repeticao permanente
   {
     background(0); // Tela de fundo preta
     text("ERRO: Arduino nao conectado. Conecte o Arduino e reinicie o programa.",200,200);
+    return;
   }
   if(!start_prog || g_c < 10)
   {
@@ -376,9 +382,9 @@ public void draw() // Rotina em repeticao permanente
   // Grafico inferior
   
   noFill(); // Desabilita preenchimento
-  rect(XMAX - (gap + sqrwidth), 430, XMAX - gap, sqrwidth + 430); // Grade externa dos eixos
+  rect(XMAX2 - (gap + sqrwidth), gap, XMAX2 - gap, sqrwidth + gap); // Grade externa dos eixos
   fill(0); // Preenche proximos desenhos de preto
-  line(XMAX - (gap + sqrwidth), 430 + sqrwidth/2, XMAX - gap, 430 + sqrwidth/2); // Eixo X do plano cartesiano
+  line(XMAX2 - (gap + sqrwidth), gap + sqrwidth/2, XMAX2 - gap, gap + sqrwidth/2); // Eixo X do plano cartesiano
   
   switch(PApplet.parseInt(ac_unit.getValue())) // Selecao de unidade do acelerometro
   {
@@ -408,7 +414,7 @@ public void draw() // Rotina em repeticao permanente
       break;
   }
   fill(0); // Preenche proximos desenhos de preto
-  text("Valores a serem representados no grafico:", 10, 135); // Texto informativo
+  text("Valores a serem representados nos graficos:", 10, 135); // Texto informativo
   text("Propriedades de visualizacao:", 10, 75); // Texto informativo
   text("Zoom:", 10, 230); // Texto informativo
   text("Amostragem:", 10 + 155, 230); // Texto informativo
@@ -429,22 +435,22 @@ public void draw() // Rotina em repeticao permanente
     
     if(accel_x == -1.0f && accel_y == -1.0f && accel_z == -1.0f && gyro_x == -1.0f && gyro_y == -1.0f && gyro_z == -1.0f && tmp == 36.53f) // Se todos forem iguais ao valor que geralmente representa erro no protocolo I2C de comunicacao
     {
-      text("Leitura acelerometro X: Erro na comunicacao!", 10, 230); // Imprime mensagem de erro
-      text("Leitura acelerometro Y: Erro na comunicacao!", 10, 250); // Imprime mensagem de erro
-      text("Leitura acelerometro Z: Erro na comunicacao!", 10, 270); // Imprime mensagem de erro
-      text("Leitura giroscopio X: Erro na comunicacao!", 10, 310); // Imprime mensagem de erro
-      text("Leitura giroscopio Y: Erro na comunicacao!", 10, 330); // Imprime mensagem de erro
-      text("Leitura giroscopio Z: Erro na comunicacao!", 10, 350); // Imprime mensagem de erro
+      text("Leitura acelerometro X: Erro na comunicacao!", 10, 270); // Imprime mensagem de erro
+      text("Leitura acelerometro Y: Erro na comunicacao!", 10, 290); // Imprime mensagem de erro
+      text("Leitura acelerometro Z: Erro na comunicacao!", 10, 310); // Imprime mensagem de erro
+      text("Leitura giroscopio X: Erro na comunicacao!", 10, 330); // Imprime mensagem de erro
+      text("Leitura giroscopio Y: Erro na comunicacao!", 10, 350); // Imprime mensagem de erro
+      text("Leitura giroscopio Z: Erro na comunicacao!", 10, 370); // Imprime mensagem de erro
       text("Temperatura: Erro na comunicacao!", 10, 390); // Imprime mensagem de erro
     }
     else
     {
-      text("Leitura acelerometro X: " + acx, 10, 230); // Imprime valor lido
-      text("Leitura acelerometro Y: " + acy, 10, 250); // Imprime valor lido
-      text("Leitura acelerometro Z: " + acz, 10, 270); // Imprime valor lido
-      text("Leitura giroscopio X: " + gyx, 10, 310); // Imprime valor lido
-      text("Leitura giroscopio Y: " + gyy, 10, 330); // Imprime valor lido
-      text("Leitura giroscopio Z: " + gyz, 10, 350); // Imprime valor lido
+      text("Leitura acelerometro X: " + acx, 10, 270); // Imprime valor lido
+      text("Leitura acelerometro Y: " + acy, 10, 290); // Imprime valor lido
+      text("Leitura acelerometro Z: " + acz, 10, 310); // Imprime valor lido
+      text("Leitura giroscopio X: " + gyx, 10, 330); // Imprime valor lido
+      text("Leitura giroscopio Y: " + gyy, 10, 350); // Imprime valor lido
+      text("Leitura giroscopio Z: " + gyz, 10, 370); // Imprime valor lido
       text("Temperatura: " + PApplet.parseInt(tmp) + "\u00baC", 10, 390); // Imprime valor lido
     }
   }
@@ -495,8 +501,9 @@ public void math()
   {
     c = 0; // Sobrescreve o dado mais antigo
     // Salvando o Arquivo
-    if((int)cb_save.getArrayValue()[0] == 1)
+    if(/*(int)cb_save.getArrayValue()[0] == 1 ||*/ turn_off == 1)
     {
+      println("writing...");
       if(PApplet.parseInt(savemode.getValue()) == 0) ext = ".csv";
       if(PApplet.parseInt(savemode.getValue()) == 1) ext = ".dat";
       if(PApplet.parseInt(savemode.getValue()) == 2) ext = ".txt";
@@ -554,30 +561,7 @@ public void controlEvent(ControlEvent ev)
     savePreferences();
   if(ev.getController().getName().equals("Reset"))
   {
-    for(int i=0;i<vSize;i++)
-    {
-      dadox[i] = 0;
-      dadoy[i] = 0;
-      dadoz[i] = 0;
-      f_dadox[i] = 0;
-      f_dadoy[i] = 0;
-      f_dadoz[i] = 0;
-    }
-    g_c = 0;
-    c = 0;
-    gx.wipe(); // Limpa os dados salvos no giroscopio
-    gy.wipe(); // Limpa os dados salvos no giroscopio
-    gz.wipe(); // Limpa os dados salvos no giroscopio
-    ax.wipe(); // Limpa os dados salvos no acelerometro
-    ay.wipe(); // Limpa os dados salvos no acelerometro
-    az.wipe(); // Limpa os dados salvos no acelerometro
-    
-    offset_acx = 0; // Valor de offset
-    offset_acy = 0; // Valor de offset
-    offset_acz = 0; // Valor de offset
-    offset_gyx = 0; // Valor de offset
-    offset_gyy = 0; // Valor de offset
-    offset_gyz = 0; // Valor de offset
+    wipe_routine();
   }
 }
 
@@ -679,7 +663,7 @@ public void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrit
   if(xString != null) // Se algo foi lido
   {
     String  temp[]  =  split(xString,":"); // Separar os dados cada vez que dois-pontos for encontrado
-    if(xString.charAt(0)  ==  '#'  &&  temp.length==7) // Se o primeiro caractere escrito for cerquilha e 8 elementos forem lidos
+    if(xString.charAt(0)  ==  '#'  &&  temp.length==8) // Se o primeiro caractere escrito for cerquilha e 8 elementos forem lidos
     {
       dt = ((float)(System.nanoTime() - acu))*1.0e-9f;
       if(!start_prog)
@@ -693,8 +677,9 @@ public void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrit
        * Sendo cada numero entre os dois-pontos uma das leituras, na ordem:
        * acelerometro x, y, z, temperatura, giroscopio x, y, z
        * */
-      temp[0] = temp[0].substring(1, temp[0].length()-1 ); // Removendo o '#' do primeiro item
+      temp[0] = temp[0].substring(1, temp[0].length()); // Removendo o '#' do primeiro item
       //println(temp[0] + '\t' + '\t' + temp[1] + '\t' + '\t' + temp[2] + '\t' + '\t' + temp[3] + '\t' + '\t' + temp[4] + '\t' + '\t' + temp[5] + '\t' + '\t' + temp[6]);
+      //println(temp[0] + ":" + temp[1] + ":" + temp[2] + ":" + temp[3] + ":" + temp[4] + ":" + temp[5] + ":" + temp[6] + ":" + temp[7]);
       accel_x = (PApplet.parseFloat(temp[0]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       accel_y = (PApplet.parseFloat(temp[1]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       accel_z = (PApplet.parseFloat(temp[2]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
@@ -702,6 +687,18 @@ public void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrit
       gyro_x = (PApplet.parseFloat(temp[4]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       gyro_y = (PApplet.parseFloat(temp[5]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       gyro_z = (PApplet.parseFloat(temp[6]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
+      if(p == 0 && (PApplet.parseInt(temp[7].charAt(0))-'0') == 1)
+      {
+        if(turn_off == 0)
+        {
+          wipe_routine();
+          create_file();
+          turn_off = 1;
+        }
+        else
+          turn_off = 0;
+      }
+      p = (PApplet.parseInt(temp[7].charAt(0))-'0');
       if(g_c < gcmax)
       {
         g_c++;
@@ -1034,7 +1031,35 @@ public void create_file()
   tbl[0] = "x"; // Preenchendo a primeira linha com qualquer coisa para sobrescrever qualquer arquivo que possa existir
   saveStrings(out+ext, tbl); // Salvando arquivo sob o nome de output_[data]_[hora].csv
 }
-  public void settings() {  size(800, 900, P2D); }
+
+public void wipe_routine()
+{
+  for(int i=0;i<vSize;i++)
+    {
+      dadox[i] = 0;
+      dadoy[i] = 0;
+      dadoz[i] = 0;
+      f_dadox[i] = 0;
+      f_dadoy[i] = 0;
+      f_dadoz[i] = 0;
+    }
+    g_c = 0;
+    c = 0;
+    gx.wipe(); // Limpa os dados salvos no giroscopio
+    gy.wipe(); // Limpa os dados salvos no giroscopio
+    gz.wipe(); // Limpa os dados salvos no giroscopio
+    ax.wipe(); // Limpa os dados salvos no acelerometro
+    ay.wipe(); // Limpa os dados salvos no acelerometro
+    az.wipe(); // Limpa os dados salvos no acelerometro
+    
+    offset_acx = 0; // Valor de offset
+    offset_acy = 0; // Valor de offset
+    offset_acz = 0; // Valor de offset
+    offset_gyx = 0; // Valor de offset
+    offset_gyy = 0; // Valor de offset
+    offset_gyz = 0; // Valor de offset
+}
+  public void settings() {  size(1260, 600, P2D); }
   static public void main(String[] passedArgs) {
     String[] appletArgs = new String[] { "Processing" };
     if (passedArgs != null) {

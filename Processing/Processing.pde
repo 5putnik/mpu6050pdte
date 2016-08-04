@@ -7,6 +7,9 @@ final float version = 1.5;
 float dt = 0; // Passo entre as medicoes (20 ms) (pode variar)
 long acu = 0; // Variavel auxiliar para o calculo variavel do dt
 
+int p = 0, // Leitura anterior do botao
+    turn_off = 0; // Vez em que o botao foi acionado (0 = ligando, 1 = desligando)
+
 final float big_P = 50; // Parametro do filtro de Kalman: define a incerteza
 final float small_Qt = 0.001; // Parametro do filtro de Kalman: define a velocidade de resposta
 final float small_Qtb = 0.003; // Parametro do filtro de Kalman: define a velocidade de resposta
@@ -479,8 +482,9 @@ void math()
   {
     c = 0; // Sobrescreve o dado mais antigo
     // Salvando o Arquivo
-    if((int)cb_save.getArrayValue()[0] == 1)
+    if(/*(int)cb_save.getArrayValue()[0] == 1 ||*/ turn_off == 1)
     {
+      println("writing...");
       if(int(savemode.getValue()) == 0) ext = ".csv";
       if(int(savemode.getValue()) == 1) ext = ".dat";
       if(int(savemode.getValue()) == 2) ext = ".txt";
@@ -538,30 +542,7 @@ public void controlEvent(ControlEvent ev)
     savePreferences();
   if(ev.getController().getName().equals("Reset"))
   {
-    for(int i=0;i<vSize;i++)
-    {
-      dadox[i] = 0;
-      dadoy[i] = 0;
-      dadoz[i] = 0;
-      f_dadox[i] = 0;
-      f_dadoy[i] = 0;
-      f_dadoz[i] = 0;
-    }
-    g_c = 0;
-    c = 0;
-    gx.wipe(); // Limpa os dados salvos no giroscopio
-    gy.wipe(); // Limpa os dados salvos no giroscopio
-    gz.wipe(); // Limpa os dados salvos no giroscopio
-    ax.wipe(); // Limpa os dados salvos no acelerometro
-    ay.wipe(); // Limpa os dados salvos no acelerometro
-    az.wipe(); // Limpa os dados salvos no acelerometro
-    
-    offset_acx = 0; // Valor de offset
-    offset_acy = 0; // Valor de offset
-    offset_acz = 0; // Valor de offset
-    offset_gyx = 0; // Valor de offset
-    offset_gyy = 0; // Valor de offset
-    offset_gyz = 0; // Valor de offset
+    wipe_routine();
   }
 }
 
@@ -663,7 +644,7 @@ void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na po
   if(xString != null) // Se algo foi lido
   {
     String  temp[]  =  split(xString,":"); // Separar os dados cada vez que dois-pontos for encontrado
-    if(xString.charAt(0)  ==  '#'  &&  temp.length==7) // Se o primeiro caractere escrito for cerquilha e 8 elementos forem lidos
+    if(xString.charAt(0)  ==  '#'  &&  temp.length==8) // Se o primeiro caractere escrito for cerquilha e 8 elementos forem lidos
     {
       dt = ((float)(System.nanoTime() - acu))*1.0e-9;
       if(!start_prog)
@@ -679,7 +660,7 @@ void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na po
        * */
       temp[0] = temp[0].substring(1, temp[0].length()); // Removendo o '#' do primeiro item
       //println(temp[0] + '\t' + '\t' + temp[1] + '\t' + '\t' + temp[2] + '\t' + '\t' + temp[3] + '\t' + '\t' + temp[4] + '\t' + '\t' + temp[5] + '\t' + '\t' + temp[6]);
-      println(temp[0] + ":" + temp[1] + ":" + temp[2] + ":" + temp[3] + ":" + temp[4] + ":" + temp[5] + ":" + temp[6]);
+      //println(temp[0] + ":" + temp[1] + ":" + temp[2] + ":" + temp[3] + ":" + temp[4] + ":" + temp[5] + ":" + temp[6] + ":" + temp[7]);
       accel_x = (float(temp[0]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       accel_y = (float(temp[1]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       accel_z = (float(temp[2]) * reg_ac) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
@@ -687,7 +668,18 @@ void serialEvent(Serial myPort) // Rotina de toda vez que algo for escrito na po
       gyro_x = (float(temp[4]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       gyro_y = (float(temp[5]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
       gyro_z = (float(temp[6]) * reg_gy) / 32768; // Atualiza variavel global e converte de representacao em escala para valor fisico
-      
+      if(p == 0 && (int(temp[7].charAt(0))-'0') == 1)
+      {
+        if(turn_off == 0)
+        {
+          wipe_routine();
+          create_file();
+          turn_off = 1;
+        }
+        else
+          turn_off = 0;
+      }
+      p = (int(temp[7].charAt(0))-'0');
       if(g_c < gcmax)
       {
         g_c++;
@@ -1019,4 +1011,32 @@ void create_file()
   String tbl[] = new String[1]; // Inicializando arquivo de output ao inicializar o programa
   tbl[0] = "x"; // Preenchendo a primeira linha com qualquer coisa para sobrescrever qualquer arquivo que possa existir
   saveStrings(out+ext, tbl); // Salvando arquivo sob o nome de output_[data]_[hora].csv
+}
+
+void wipe_routine()
+{
+  for(int i=0;i<vSize;i++)
+    {
+      dadox[i] = 0;
+      dadoy[i] = 0;
+      dadoz[i] = 0;
+      f_dadox[i] = 0;
+      f_dadoy[i] = 0;
+      f_dadoz[i] = 0;
+    }
+    g_c = 0;
+    c = 0;
+    gx.wipe(); // Limpa os dados salvos no giroscopio
+    gy.wipe(); // Limpa os dados salvos no giroscopio
+    gz.wipe(); // Limpa os dados salvos no giroscopio
+    ax.wipe(); // Limpa os dados salvos no acelerometro
+    ay.wipe(); // Limpa os dados salvos no acelerometro
+    az.wipe(); // Limpa os dados salvos no acelerometro
+    
+    offset_acx = 0; // Valor de offset
+    offset_acy = 0; // Valor de offset
+    offset_acz = 0; // Valor de offset
+    offset_gyx = 0; // Valor de offset
+    offset_gyy = 0; // Valor de offset
+    offset_gyz = 0; // Valor de offset
 }

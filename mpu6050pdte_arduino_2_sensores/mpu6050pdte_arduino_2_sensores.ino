@@ -7,8 +7,14 @@ const int MPU2=0x69;  // Endereco I2C do MPU-6050 numero 2
 int16_t AcX1, AcY1, AcZ1, Tmp1, GyX1, GyY1, GyZ1; // Leituras do MPU-6050 1
 int16_t AcX2, AcY2, AcZ2, Tmp2, GyX2, GyY2, GyZ2; // Leituras do MPU-6050 2
 int16_t AcX, AcY, AcZ, Tmp, GyX, GyY, GyZ; // Variaveis finais, que serao enviadas ao programa
+short p;
+unsigned long dt;
+#define BOT A0
+
 void setup()
 {
+  pinMode(BOT,INPUT);
+  
   Wire.begin();
   
   Wire.beginTransmission(MPU1);
@@ -26,6 +32,7 @@ void setup()
 }
 void loop()
 {
+  dt = millis();
   Wire.beginTransmission(MPU1);
   Wire.write(0x3B);  // starting with register 0x3B (ACCEL_XOUT_H)
   Wire.endTransmission(false);
@@ -69,6 +76,7 @@ void loop()
   GyY = GyY1 - GyY2;
   GyZ = GyZ1 - GyZ2;
   
+  p = digitalRead(BOT);
   Serial.print("#");
   Serial.print(AcX);
   Serial.print(":");
@@ -82,7 +90,9 @@ void loop()
   Serial.print(":");
   Serial.print(GyY);
   Serial.print(":");
-  Serial.println(GyZ);
+  Serial.print(GyZ);
+  Serial.print(":");
+  Serial.println(p);
   /*Serial.print("AcX = "); Serial.print(AcX);
   Serial.print(" | AcY = "); Serial.print(AcY);
   Serial.print(" | AcZ = "); Serial.print(AcZ);
@@ -90,5 +100,6 @@ void loop()
   Serial.print(" | GyX = "); Serial.print(GyX);
   Serial.print(" | GyY = "); Serial.print(GyY);
   Serial.print(" | GyZ = "); Serial.println(GyZ);*/
-  delay(5);
+  while(millis()-dt < 10)
+    ;
 }
